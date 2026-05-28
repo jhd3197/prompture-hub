@@ -1,5 +1,15 @@
 # syntax=docker/dockerfile:1.7
 
+# --- frontend build stage ---
+FROM node:20-slim AS frontend
+WORKDIR /build/frontend
+COPY frontend/package.json frontend/package-lock.json* ./
+RUN npm install --no-audit --no-fund
+COPY frontend/ ./
+RUN npm run build
+
+
+# --- python runtime ---
 FROM python:3.12-slim AS base
 
 ENV PYTHONDONTWRITEBYTECODE=1 \
@@ -15,6 +25,9 @@ WORKDIR /app
 
 COPY pyproject.toml README.md ./
 COPY src ./src
+
+# Bring in the built SPA bundle from the frontend stage.
+COPY --from=frontend /build/src/prompture_hub/static/app ./src/prompture_hub/static/app
 
 RUN pip install --upgrade pip \
  && pip install .

@@ -30,8 +30,13 @@ cp .env.example .env
 # Fill in: HUB_ADMIN_TOKEN, plus whatever provider keys you want available
 # (OPENAI_API_KEY, ANTHROPIC_API_KEY, OLLAMA_BASE_URL, ...)
 
+# Build the React dashboard once (or use `npm run dev` for hot reload):
+cd frontend && npm install && npm run build && cd ..
+
 uvicorn prompture_hub.main:app --reload
 ```
+
+Open `http://localhost:1984/` — you'll be redirected to the SPA at `/app/`.
 
 Then create a scoped key for an untrusted app:
 
@@ -159,21 +164,38 @@ For a public deployment, put it behind nginx/Caddy with TLS and rate limits — 
 ```
 prompture-hub/
 ├── src/prompture_hub/
-│   ├── main.py              FastAPI app factory + lifespan + uvicorn CLI
-│   ├── settings.py          HubSettings (admin_token, db_path, host/port)
-│   ├── auth.py              require_admin + require_hub_key dependencies
+│   ├── main.py              FastAPI app factory + SPA mount + uvicorn CLI
+│   ├── settings.py          HubSettings (admin_token, db_path, host/port, OAuth)
+│   ├── auth.py              require_admin / require_hub_key / require_user
+│   ├── oauth.py             Authlib OAuth registry (Google + GitHub)
 │   ├── routers/
 │   │   ├── openai_compat.py /v1/chat/completions, /v1/models
 │   │   ├── extract.py       /v1/extract (Prompture-native)
+│   │   ├── conversations.py /v1/conversations (resumable sessions)
 │   │   ├── admin.py         /admin/keys CRUD + /admin/usage
-│   │   └── dashboard.py     server-rendered HTML dashboard (Jinja2)
+│   │   ├── auth.py          /auth/{google,github}/start + /callback + /logout
+│   │   └── spa_api.py       /api/* — JSON consumed by the React SPA
 │   ├── storage/
 │   │   ├── db.py            SQLite engine + session factory
-│   │   └── models.py        HubKey, UsageRecord (SQLModel tables)
-│   ├── templates/           Jinja2 dashboard templates (Tailwind via CDN)
+│   │   └── models.py        HubKey, UsageRecord, User, Conversation, Message
 │   └── static/
-└── tests/
+│       └── app/             Built SPA bundle (output of `npm run build`)
+└── frontend/                Vite + React + TypeScript dashboard
+    └── src/
+        ├── components/      Header, Modal, Toast, StatCard, TrustFlow, …
+        ├── pages/           LoginPage, Dashboard, KeysPage, ModelsPage
+        ├── api.ts           Typed fetch wrappers
+        └── styles.css       Design system (light + dark via [data-theme])
 ```
+
+### Frontend dev loop
+
+```bash
+cd frontend
+npm run dev        # http://localhost:1985  (proxies /api, /auth, /v1 to FastAPI)
+```
+
+The Vite dev server proxies all backend paths (`/api`, `/auth`, `/v1`, `/admin`, `/docs`, `/health`) to `http://127.0.0.1:1984`, so you can run uvicorn + vite side by side with hot reload on both.
 
 ## Security model
 

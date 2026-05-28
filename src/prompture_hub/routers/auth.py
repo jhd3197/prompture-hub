@@ -17,12 +17,10 @@ dashboard is never wide-open by accident.
 
 from __future__ import annotations
 
-import os
 from datetime import datetime, timezone
 
 from fastapi import APIRouter, HTTPException, Request, status
-from fastapi.responses import HTMLResponse, RedirectResponse
-from fastapi.templating import Jinja2Templates
+from fastapi.responses import RedirectResponse
 from sqlmodel import select
 
 from ..oauth import get_oauth
@@ -32,23 +30,13 @@ from ..storage.models import User
 
 router = APIRouter()
 
-_templates_dir = os.path.join(os.path.dirname(os.path.dirname(__file__)), "templates")
-templates = Jinja2Templates(directory=_templates_dir)
 
-
-@router.get("/login", response_class=HTMLResponse)
-def login_page(request: Request) -> HTMLResponse:
-    s = get_settings()
-    return templates.TemplateResponse(
-        request,
-        "login.html",
-        {
-            "google_enabled": s.google_enabled,
-            "github_enabled": s.github_enabled,
-            "auth_configured": s.auth_enabled,
-            "error": request.query_params.get("error"),
-        },
-    )
+@router.get("/login")
+def login_page(request: Request) -> RedirectResponse:
+    """The SPA renders the login UI. Any error param is preserved."""
+    qs = request.url.query
+    target = "/app/" + (f"?{qs}" if qs else "")
+    return RedirectResponse(url=target, status_code=status.HTTP_302_FOUND)
 
 
 @router.get("/{provider}/start")
@@ -85,7 +73,7 @@ async def oauth_callback(provider: str, request: Request):
         token = await client.authorize_access_token(request)
     except Exception as exc:  # noqa: BLE001
         return RedirectResponse(
-            url=f"/auth/login?error=oauth_failed:{exc}",
+            url=f"/app/?error=oauth_failed:{exc}",
             status_code=status.HTTP_302_FOUND,
         )
 
@@ -118,14 +106,14 @@ async def oauth_callback(provider: str, request: Request):
 
     if not email or not provider_user_id:
         return RedirectResponse(
-            url="/auth/login?error=no_email_from_provider",
+            url="/app/?error=no_email_from_provider",
             status_code=status.HTTP_302_FOUND,
         )
 
     allowlist = s.allowed_email_set
     if not allowlist or email not in allowlist:
         return RedirectResponse(
-            url="/auth/login?error=email_not_allowlisted",
+            url="/app/?error=email_not_allowlisted",
             status_code=status.HTTP_302_FOUND,
         )
 
@@ -156,11 +144,11 @@ async def oauth_callback(provider: str, request: Request):
 
     request.session["user_id"] = user_id
     request.session["email"] = email
-    return RedirectResponse(url="/", status_code=status.HTTP_302_FOUND)
+    return RedirectResponse(url="/app/", status_code=status.HTTP_302_FOUND)
 
 
 @router.get("/logout")
 @router.post("/logout")
 async def logout(request: Request) -> RedirectResponse:
     request.session.clear()
-    return RedirectResponse(url="/auth/login", status_code=status.HTTP_302_FOUND)
+    return RedirectResponse(url="/app/", status_code=status.HTTP_302_FOUND)

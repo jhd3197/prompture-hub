@@ -6,13 +6,20 @@ import logging
 import os
 from contextlib import asynccontextmanager
 
-from fastapi import FastAPI, Request
-from fastapi.responses import RedirectResponse
+from fastapi import FastAPI, HTTPException, Request, status
+from fastapi.responses import FileResponse, RedirectResponse
 from fastapi.staticfiles import StaticFiles
 from starlette.middleware.sessions import SessionMiddleware
 
 from .auth import LoginRequired
-from .routers import admin, auth as auth_router, conversations, dashboard, extract, openai_compat
+from .routers import (
+    admin,
+    auth as auth_router,
+    conversations,
+    extract,
+    openai_compat,
+    spa_api,
+)
 from .settings import get_settings
 from .storage.db import init_db
 
@@ -51,14 +58,22 @@ def create_app() -> FastAPI:
 
     @app.exception_handler(LoginRequired)
     async def _login_required_handler(_request: Request, exc: LoginRequired):
-        return RedirectResponse(url=exc.target, status_code=302)
+        # The SPA renders its own login UI based on /api/me 401, so route
+        # browser redirects there instead of a server-rendered page.
+        target = exc.target if exc.target.startswith("/app") else "/app/"
+        return RedirectResponse(url=target, status_code=302)
 
+    # Programmatic surfaces — unchanged.
     app.include_router(openai_compat.router, prefix="/v1", tags=["openai-compat"])
     app.include_router(extract.router, prefix="/v1", tags=["prompture-native"])
     app.include_router(conversations.router, prefix="/v1", tags=["conversations"])
     app.include_router(admin.router, prefix="/admin", tags=["admin"])
+
+    # Auth flow (OAuth redirects need server-side handling).
     app.include_router(auth_router.router, prefix="/auth", tags=["auth"])
-    app.include_router(dashboard.router, tags=["dashboard"])
+
+    # SPA-backing JSON.
+    app.include_router(spa_api.router, prefix="/api", tags=["spa"])
 
     @app.get("/health", tags=["meta"])
     def health() -> dict[str, str]:
@@ -66,6 +81,41 @@ def create_app() -> FastAPI:
 
     static_dir = os.path.join(os.path.dirname(__file__), "static")
     app.mount("/static", StaticFiles(directory=static_dir), name="static")
+
+    # --- SPA: served from /app/ ---
+    spa_dir = os.path.join(static_dir, "app")
+    spa_index = os.path.join(spa_dir, "index.html")
+    spa_assets = os.path.join(spa_dir, "assets")
+    if os.path.isdir(spa_assets):
+        app.mount("/app/assets", StaticFiles(directory=spa_assets), name="spa-assets")
+
+    @app.get("/")
+    def root_to_app() -> RedirectResponse:
+        return RedirectResponse(url="/app/", status_code=302)
+
+    @app.get("/app")
+    @app.get("/app/")
+    @app.get("/app/{path:path}")
+    def spa_index_handler(path: str = "") -> FileResponse:
+        # Serve real files (favicon, vite.svg, etc.) when they exist,
+        # otherwise fall back to index.html so client-side routes resolve.
+        if path:
+            candidate = os.path.normpath(os.path.join(spa_dir, path))
+            if (
+                candidate.startswith(spa_dir)
+                and os.path.isfile(candidate)
+                and not candidate.endswith("index.html")
+            ):
+                return FileResponse(candidate)
+        if not os.path.isfile(spa_index):
+            raise HTTPException(
+                status_code=status.HTTP_503_SERVICE_UNAVAILABLE,
+                detail=(
+                    "SPA bundle not built. Run `npm install && npm run build` "
+                    "inside the `frontend/` directory."
+                ),
+            )
+        return FileResponse(spa_index)
 
     return app
 

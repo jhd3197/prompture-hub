@@ -14,3 +14,4 @@ dist
 .env
 prompture_hub.db
 tests
+frontend/node_modules

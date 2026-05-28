@@ -58,3 +58,9 @@ htmlcov/
 
 # Logs
 *.log
+
+# Frontend / Node
+frontend/node_modules/
+frontend/dist/
+src/prompture_hub/static/app/
+*.tsbuildinfo
