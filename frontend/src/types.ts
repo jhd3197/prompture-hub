@@ -65,3 +65,43 @@ export interface CreatedKey {
   daily_spend_cap_usd: number;
   rate_limit_per_min: number;
 }
+
+export interface ConversationSummary {
+  id: string;
+  title: string | null;
+  model: string | null;
+  key_id: number;
+  created_at: string;
+  updated_at: string;
+  message_count: number;
+}
+
+export interface ConversationMessage {
+  id: string;
+  role: string;
+  content: string;
+  tool_calls: unknown | null;
+  prompt_tokens: number;
+  completion_tokens: number;
+  total_tokens: number;
+  cost_usd: number;
+  created_at: string;
+}
+
+export interface ConversationDetail {
+  id: string;
+  title: string | null;
+  model: string | null;
+  key_id: number;
+  meta: Record<string, unknown>;
+  created_at: string;
+  updated_at: string;
+  totals: {
+    prompt_tokens: number;
+    completion_tokens: number;
+    total_tokens: number;
+    cost_usd: number;
+    message_count: number;
+  };
+  messages: ConversationMessage[];
+}

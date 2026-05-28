@@ -1,5 +1,6 @@
 import type {
-  AuthProviders, CreatedKey, CurrentUser, HubKey, ModelsResponse, Overview,
+  AuthProviders, ConversationDetail, ConversationSummary, CreatedKey,
+  CurrentUser, HubKey, ModelsResponse, Overview,
 } from "./types";
 
 export class ApiError extends Error {
@@ -51,6 +52,12 @@ export const api = {
   revokeKey: (id: number) =>
     request<void>(`/api/keys/${id}/revoke`, { method: "POST" }),
   models: () => request<ModelsResponse>("/api/models"),
+  listConversations: () =>
+    request<ConversationSummary[]>("/api/conversations"),
+  getConversation: (id: string) =>
+    request<ConversationDetail>(`/api/conversations/${id}`),
+  deleteConversation: (id: string) =>
+    request<void>(`/api/conversations/${id}`, { method: "DELETE" }),
   logoutHref: "/auth/logout",
   loginHref: (provider: "google" | "github") => `/auth/${provider}/start`,
 };

@@ -5,6 +5,7 @@ import {
 import { ApiError, api } from "./api";
 import { Header } from "./components/Header";
 import { ToastProvider } from "./components/Toast";
+import { ConversationsPage } from "./pages/ConversationsPage";
 import { Dashboard } from "./pages/Dashboard";
 import { KeysPage } from "./pages/KeysPage";
 import { LoginPage } from "./pages/LoginPage";
@@ -42,6 +43,7 @@ function AuthedShell({ user }: { user: CurrentUser }) {
           <Routes>
             <Route path="/" element={<Dashboard user={user} />} />
             <Route path="/keys" element={<KeysPage />} />
+            <Route path="/conversations" element={<ConversationsPage />} />
             <Route path="/models" element={<ModelsPage />} />
             <Route path="*" element={<Navigate to="/" replace />} />
           </Routes>

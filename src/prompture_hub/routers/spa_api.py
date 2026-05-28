@@ -18,7 +18,7 @@ from sqlmodel import select
 from ..auth import generate_key, require_user
 from ..settings import get_settings
 from ..storage.db import get_session
-from ..storage.models import HubKey, UsageRecord, User
+from ..storage.models import Conversation, HubKey, Message, UsageRecord, User
 
 router = APIRouter()
 
@@ -190,6 +190,148 @@ def revoke_key(key_id: int, user: User = Depends(require_user)) -> None:
             row.revoked_at = datetime.now(timezone.utc)
             session.add(row)
             session.commit()
+
+
+# ---------------------------------------------------------------------------
+# Conversations — user-scoped, joined through HubKey.user_id.
+# ---------------------------------------------------------------------------
+
+
+def _user_key_ids(user: User) -> list[int] | None:
+    """Return the IDs of every HubKey owned by ``user``, or ``None`` when
+    user-scoping is disabled (localhost-open dev mode)."""
+    if not _user_scope(user):
+        return None
+    with get_session() as session:
+        return [
+            k.id for k in session.exec(
+                select(HubKey.id).where(HubKey.user_id == user.id)
+            ).all()
+        ]
+
+
+def _require_owned_conversation(conv_id: str, user: User) -> Conversation:
+    with get_session() as session:
+        conv = session.get(Conversation, conv_id)
+    if not conv:
+        raise HTTPException(
+            status_code=status.HTTP_404_NOT_FOUND,
+            detail="Conversation not found.",
+        )
+    user_keys = _user_key_ids(user)
+    if user_keys is not None and conv.key_id not in user_keys:
+        raise HTTPException(
+            status_code=status.HTTP_404_NOT_FOUND,
+            detail="Conversation not found.",
+        )
+    return conv
+
+
+@router.get("/conversations")
+def list_conversations(
+    limit: int = 50,
+    user: User = Depends(require_user),
+) -> list[dict[str, Any]]:
+    user_keys = _user_key_ids(user)
+    with get_session() as session:
+        stmt = (
+            select(Conversation)
+            .order_by(Conversation.updated_at.desc())
+            .limit(limit)
+        )
+        if user_keys is not None:
+            stmt = stmt.where(Conversation.key_id.in_(user_keys or [-1]))
+        convs = session.exec(stmt).all()
+
+        out: list[dict[str, Any]] = []
+        for c in convs:
+            msg_count = len(
+                session.exec(
+                    select(Message.id).where(Message.conversation_id == c.id)
+                ).all()
+            )
+            out.append({
+                "id": c.id,
+                "title": c.title,
+                "model": c.model,
+                "key_id": c.key_id,
+                "created_at": c.created_at.isoformat(),
+                "updated_at": c.updated_at.isoformat(),
+                "message_count": msg_count,
+            })
+        return out
+
+
+@router.get("/conversations/{conv_id}")
+def get_conversation(
+    conv_id: str,
+    user: User = Depends(require_user),
+) -> dict[str, Any]:
+    conv = _require_owned_conversation(conv_id, user)
+    with get_session() as session:
+        msgs = session.exec(
+            select(Message)
+            .where(Message.conversation_id == conv_id)
+            .order_by(Message.created_at.asc())
+        ).all()
+
+    total_prompt = sum(m.prompt_tokens for m in msgs)
+    total_completion = sum(m.completion_tokens for m in msgs)
+    total_cost = sum(m.cost_usd for m in msgs)
+
+    return {
+        "id": conv.id,
+        "title": conv.title,
+        "model": conv.model,
+        "key_id": conv.key_id,
+        "meta": conv.meta or {},
+        "created_at": conv.created_at.isoformat(),
+        "updated_at": conv.updated_at.isoformat(),
+        "totals": {
+            "prompt_tokens": total_prompt,
+            "completion_tokens": total_completion,
+            "total_tokens": total_prompt + total_completion,
+            "cost_usd": total_cost,
+            "message_count": len(msgs),
+        },
+        "messages": [
+            {
+                "id": m.id,
+                "role": m.role,
+                "content": m.content,
+                "tool_calls": m.tool_calls,
+                "prompt_tokens": m.prompt_tokens,
+                "completion_tokens": m.completion_tokens,
+                "total_tokens": m.total_tokens,
+                "cost_usd": m.cost_usd,
+                "created_at": m.created_at.isoformat(),
+            }
+            for m in msgs
+        ],
+    }
+
+
+@router.delete(
+    "/conversations/{conv_id}",
+    status_code=status.HTTP_204_NO_CONTENT,
+)
+def delete_conversation(
+    conv_id: str,
+    user: User = Depends(require_user),
+) -> None:
+    _require_owned_conversation(conv_id, user)
+    with get_session() as session:
+        for m in session.exec(
+            select(Message).where(Message.conversation_id == conv_id)
+        ).all():
+            session.delete(m)
+        conv = session.get(Conversation, conv_id)
+        if conv:
+            session.delete(conv)
+        session.commit()
+
+
+# ---------------------------------------------------------------------------
 
 
 @router.get("/models")

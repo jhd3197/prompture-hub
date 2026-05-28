@@ -1,6 +1,7 @@
 import { NavLink } from "react-router-dom";
 import {
-  IconBook, IconExternal, IconGrid, IconHome, IconKey, IconMoon, IconSun,
+  IconBook, IconExternal, IconGrid, IconHome, IconKey, IconMessages,
+  IconMoon, IconSun,
 } from "../icons";
 import { useTheme } from "../theme";
 import type { CurrentUser } from "../types";
@@ -9,6 +10,7 @@ import { Brand } from "./Brand";
 const nav: Array<[string, string, (p: { style?: React.CSSProperties }) => JSX.Element]> = [
   ["/", "Home", IconHome],
   ["/keys", "Keys", IconKey],
+  ["/conversations", "Sessions", IconMessages],
   ["/models", "Models", IconGrid],
 ];
 
