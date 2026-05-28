@@ -2,13 +2,15 @@ import { useEffect, useState } from "react";
 import { Brand } from "../components/Brand";
 import { TrustFlow } from "../components/TrustFlow";
 import {
-  IconAlert, IconCheck, IconGitHub, IconGoogle, IconKey,
+  IconAlert, IconCheck, IconGitHub, IconGoogle, IconKey, IconMoon, IconSun,
 } from "../icons";
+import { useTheme } from "../theme";
 import { api } from "../api";
 import type { AuthProviders } from "../types";
 
 export function LoginPage({ error }: { error?: string }) {
   const [providers, setProviders] = useState<AuthProviders | null>(null);
+  const [theme, toggleTheme] = useTheme();
 
   useEffect(() => {
     api.providers()
@@ -56,7 +58,15 @@ export function LoginPage({ error }: { error?: string }) {
         </div>
       </aside>
 
-      <main className="login-main">
+      <main className="login-main" style={{ position: "relative" }}>
+        <button
+          className="icon-btn"
+          onClick={toggleTheme}
+          aria-label={`Switch to ${theme === "dark" ? "light" : "dark"} theme`}
+          style={{ position: "absolute", top: 20, right: 20 }}
+        >
+          {theme === "dark" ? <IconSun /> : <IconMoon />}
+        </button>
         <div className="login-card fade-in">
           <h2 style={{ fontSize: 22, fontWeight: 800, letterSpacing: "-0.02em", margin: 0 }}>
             Sign in to the dashboard

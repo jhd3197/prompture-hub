@@ -1,5 +1,8 @@
 import { NavLink } from "react-router-dom";
-import { IconBook, IconExternal, IconGrid, IconHome, IconKey } from "../icons";
+import {
+  IconBook, IconExternal, IconGrid, IconHome, IconKey, IconMoon, IconSun,
+} from "../icons";
+import { useTheme } from "../theme";
 import type { CurrentUser } from "../types";
 import { Brand } from "./Brand";
 
@@ -11,6 +14,7 @@ const nav: Array<[string, string, (p: { style?: React.CSSProperties }) => JSX.El
 
 export function Header({ user }: { user: CurrentUser }) {
   const initials = (user.name || user.email || "?").charAt(0).toUpperCase();
+  const [theme, toggleTheme] = useTheme();
   return (
     <header className="header">
       <div className="container header-inner">
@@ -32,6 +36,15 @@ export function Header({ user }: { user: CurrentUser }) {
           </a>
         </nav>
         <div className="header-right">
+          <button
+            className="icon-btn"
+            onClick={toggleTheme}
+            aria-label={`Switch to ${theme === "dark" ? "light" : "dark"} theme`}
+            title={`Switch to ${theme === "dark" ? "light" : "dark"} theme`}
+          >
+            {theme === "dark" ? <IconSun /> : <IconMoon />}
+          </button>
+          <div className="divider" style={{ width: 1, height: 22, margin: "0 4px" }}></div>
           <div className="row" style={{ gap: 9 }}>
             <span className="avatar" title={user.email}>{initials}</span>
             <div style={{ lineHeight: 1.2 }}>
