@@ -2,6 +2,36 @@
 {% block title %}Keys &middot; prompture-hub{% endblock %}
 {% block content %}
 
+{% if new_key %}
+<div class="mb-6 rounded-xl border border-emerald-500/40 bg-emerald-500/5 p-5 backdrop-blur">
+  <div class="flex items-start gap-3">
+    <div class="rounded-md bg-emerald-500/15 border border-emerald-500/30 p-1.5 mt-0.5">
+      <i data-lucide="check-circle-2" class="w-4 h-4 text-emerald-400"></i>
+    </div>
+    <div class="flex-1 min-w-0">
+      <div class="flex items-center justify-between flex-wrap gap-2 mb-2">
+        <div>
+          <div class="font-semibold text-emerald-300">Key created: <span class="mono text-emerald-200">{{ new_key.name }}</span></div>
+          <div class="text-xs text-emerald-300/70 mt-0.5">Shown <strong>once</strong>. Copy it now — you won't be able to see it again.</div>
+        </div>
+      </div>
+      <div class="relative bg-slate-950/80 border border-emerald-500/20 rounded-lg p-3 group">
+        <pre class="text-xs text-emerald-200 mono overflow-x-auto break-all"><code id="new-key-plaintext">{{ new_key.plaintext }}</code></pre>
+        <button onclick="copyCode(this)" class="copy-btn absolute top-2 right-2 p-1.5 rounded text-emerald-400 hover:text-emerald-200 hover:bg-emerald-500/10 transition" style="opacity:1">
+          <i data-lucide="copy" class="w-3.5 h-3.5"></i>
+        </button>
+      </div>
+    </div>
+  </div>
+</div>
+{% endif %}
+
+{% if form_error %}
+<div class="mb-6 rounded-md border border-rose-500/30 bg-rose-500/10 text-rose-200 text-sm px-4 py-2 mono">
+  {{ form_error }}
+</div>
+{% endif %}
+
 <div class="flex items-end justify-between mb-8 flex-wrap gap-4">
   <div>
     <h1 class="text-3xl font-bold tracking-tight">API keys</h1>
@@ -29,6 +59,7 @@
         <th class="text-right px-5 py-3 font-medium">Rate limit</th>
         <th class="text-left px-5 py-3 font-medium">Created</th>
         <th class="text-left px-5 py-3 font-medium">Status</th>
+        <th class="text-right px-5 py-3 font-medium">&nbsp;</th>
       </tr>
     </thead>
     <tbody class="divide-y divide-slate-800/50">
@@ -58,10 +89,19 @@
           </span>
           {% endif %}
         </td>
+        <td class="px-5 py-3 text-right">
+          {% if not k.revoked_at %}
+          <form method="post" action="/keys/{{ k.id }}/revoke" onsubmit="return confirm('Revoke key &quot;{{ k.name }}&quot;? Clients using it lose access immediately.');" class="inline">
+            <button type="submit" class="text-xs text-slate-500 hover:text-rose-400 transition px-2 py-1 rounded hover:bg-rose-500/10" title="Revoke key">
+              <i data-lucide="x-circle" class="w-3.5 h-3.5"></i>
+            </button>
+          </form>
+          {% endif %}
+        </td>
       </tr>
       {% else %}
       <tr>
-        <td colspan="6" class="px-5 py-16">
+        <td colspan="7" class="px-5 py-16">
           <div class="text-center">
             <div class="relative inline-flex items-center justify-center w-16 h-16 mb-4">
               <div class="absolute inset-0 bg-emerald-500/10 rounded-full blur-xl"></div>
@@ -70,7 +110,7 @@
               </div>
             </div>
             <p class="text-slate-300 text-base font-medium mb-1">No keys yet</p>
-            <p class="text-slate-500 text-sm">Issue your first hub key with <code class="text-slate-400 bg-slate-800/60 px-1.5 py-0.5 rounded mono text-xs">POST /admin/keys</code></p>
+            <p class="text-slate-500 text-sm">Use the form below to issue your first hub key.</p>
           </div>
         </td>
       </tr>
@@ -81,31 +121,45 @@
 
 <div class="grid grid-cols-1 lg:grid-cols-3 gap-4">
   <div class="lg:col-span-2 rounded-xl border border-slate-800/60 bg-slate-900/30 p-6 backdrop-blur-sm">
-    <div class="flex items-center gap-2 mb-3">
+    <div class="flex items-center gap-2 mb-4">
       <div class="rounded-md bg-emerald-500/10 border border-emerald-500/20 p-1.5">
-        <i data-lucide="terminal" class="w-3.5 h-3.5 text-emerald-400"></i>
+        <i data-lucide="plus-circle" class="w-3.5 h-3.5 text-emerald-400"></i>
       </div>
       <h2 class="font-semibold text-slate-100">Issue a new key</h2>
     </div>
-    <p class="text-sm text-slate-400 mb-4">v0.1 ships API-only key management. A creation form lands in v0.2.</p>
-    <div class="relative bg-slate-950/70 border border-slate-800 rounded-lg p-4 group">
-      <div class="flex items-center justify-between mb-2">
-        <span class="text-[10px] uppercase tracking-widest text-slate-500">curl</span>
-        <span class="text-[10px] text-slate-600 mono">POST /admin/keys</span>
+    <form method="post" action="/keys" class="space-y-3">
+      <div>
+        <label class="block text-[10px] uppercase tracking-widest text-slate-500 mb-1">Name</label>
+        <input type="text" name="name" required maxlength="100" placeholder="my-app"
+               class="w-full bg-slate-950/70 border border-slate-800 rounded-md px-3 py-2 text-sm text-slate-100 mono focus:outline-none focus:border-emerald-500/60 focus:ring-1 focus:ring-emerald-500/30" />
       </div>
-      <pre class="text-xs text-slate-300 mono overflow-x-auto leading-relaxed"><code>curl -X POST http://localhost:1984/admin/keys \
-  -H "Authorization: Bearer $HUB_ADMIN_TOKEN" \
-  -H "Content-Type: application/json" \
-  -d '{
-    "name": "my-app",
-    "allowed_models": ["ollama/llama3.1:8b"],
-    "daily_spend_cap_usd": 1.0,
-    "rate_limit_per_min": 30
-  }'</code></pre>
-      <button onclick="copyCode(this)" class="copy-btn absolute top-2 right-2 p-1.5 rounded text-slate-500 hover:text-slate-200 hover:bg-slate-800/80 transition">
-        <i data-lucide="copy" class="w-3.5 h-3.5"></i>
-      </button>
-    </div>
+      <div>
+        <label class="block text-[10px] uppercase tracking-widest text-slate-500 mb-1">
+          Allowed models <span class="text-slate-600 normal-case tracking-normal">(comma-separated, empty = any)</span>
+        </label>
+        <input type="text" name="allowed_models" placeholder="ollama/llama3.1:8b, openai/gpt-4"
+               class="w-full bg-slate-950/70 border border-slate-800 rounded-md px-3 py-2 text-sm text-slate-100 mono focus:outline-none focus:border-emerald-500/60 focus:ring-1 focus:ring-emerald-500/30" />
+      </div>
+      <div class="grid grid-cols-2 gap-3">
+        <div>
+          <label class="block text-[10px] uppercase tracking-widest text-slate-500 mb-1">Daily spend cap (USD)</label>
+          <input type="number" name="daily_spend_cap_usd" min="0" step="0.01" value="1.00"
+                 class="w-full bg-slate-950/70 border border-slate-800 rounded-md px-3 py-2 text-sm text-slate-100 mono focus:outline-none focus:border-emerald-500/60 focus:ring-1 focus:ring-emerald-500/30" />
+        </div>
+        <div>
+          <label class="block text-[10px] uppercase tracking-widest text-slate-500 mb-1">Rate limit (req/min)</label>
+          <input type="number" name="rate_limit_per_min" min="1" step="1" value="60"
+                 class="w-full bg-slate-950/70 border border-slate-800 rounded-md px-3 py-2 text-sm text-slate-100 mono focus:outline-none focus:border-emerald-500/60 focus:ring-1 focus:ring-emerald-500/30" />
+        </div>
+      </div>
+      <div class="pt-2 flex items-center justify-between gap-3">
+        <p class="text-xs text-slate-500">Plaintext is shown <strong class="text-slate-300">once</strong> right here.</p>
+        <button type="submit" class="inline-flex items-center gap-2 px-4 py-2 rounded-md bg-emerald-500/15 border border-emerald-500/30 text-emerald-300 hover:bg-emerald-500/25 transition text-sm font-medium">
+          <i data-lucide="key-round" class="w-3.5 h-3.5"></i>
+          Create key
+        </button>
+      </div>
+    </form>
   </div>
 
   <div class="rounded-xl border border-slate-800/60 bg-slate-900/30 p-6 backdrop-blur-sm">
