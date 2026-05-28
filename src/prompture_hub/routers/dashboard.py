@@ -17,8 +17,18 @@ from sqlalchemy import func
 from sqlmodel import select
 
 from ..auth import require_user
+from ..settings import get_settings
 from ..storage.db import get_session
 from ..storage.models import HubKey, User, UsageRecord
+
+
+def _user_filter_enabled(user: User) -> bool:
+    """True when we should restrict queries to ``HubKey.user_id == user.id``.
+
+    Skipped in the fallback localhost-open mode (auth not configured) so
+    solo dev still sees every row.
+    """
+    return get_settings().auth_enabled and user.id is not None and user.id > 0
 
 router = APIRouter()
 _templates_dir = os.path.join(os.path.dirname(os.path.dirname(__file__)), "templates")
@@ -27,24 +37,36 @@ templates = Jinja2Templates(directory=_templates_dir)
 
 @router.get("/", response_class=HTMLResponse)
 def home(request: Request, current_user: User = Depends(require_user)) -> HTMLResponse:
+    scoped = _user_filter_enabled(current_user)
     with get_session() as session:
-        keys = session.exec(
-            select(HubKey).order_by(HubKey.created_at.desc()).limit(10)
-        ).all()
-        recent_usage = session.exec(
-            select(UsageRecord).order_by(UsageRecord.timestamp.desc()).limit(10)
-        ).all()
+        keys_stmt = select(HubKey).order_by(HubKey.created_at.desc()).limit(10)
+        if scoped:
+            keys_stmt = keys_stmt.where(HubKey.user_id == current_user.id)
+        keys = session.exec(keys_stmt).all()
+
+        usage_stmt = select(UsageRecord).order_by(UsageRecord.timestamp.desc()).limit(10)
+        if scoped:
+            user_key_ids = [
+                k.id
+                for k in session.exec(
+                    select(HubKey.id).where(HubKey.user_id == current_user.id)
+                ).all()
+            ]
+            usage_stmt = usage_stmt.where(UsageRecord.key_id.in_(user_key_ids or [-1]))
+        recent_usage = session.exec(usage_stmt).all()
+
         day_ago = datetime.now(timezone.utc) - timedelta(days=1)
-        spend_24h = (
-            session.exec(
-                select(func.coalesce(func.sum(UsageRecord.cost_usd), 0.0)).where(
-                    UsageRecord.timestamp >= day_ago
-                )
-            ).one()
+        spend_stmt = select(func.coalesce(func.sum(UsageRecord.cost_usd), 0.0)).where(
+            UsageRecord.timestamp >= day_ago
         )
-        active_key_count = session.exec(
-            select(func.count(HubKey.id)).where(HubKey.revoked_at.is_(None))
-        ).one()
+        if scoped:
+            spend_stmt = spend_stmt.where(UsageRecord.key_id.in_(user_key_ids or [-1]))
+        spend_24h = session.exec(spend_stmt).one()
+
+        active_stmt = select(func.count(HubKey.id)).where(HubKey.revoked_at.is_(None))
+        if scoped:
+            active_stmt = active_stmt.where(HubKey.user_id == current_user.id)
+        active_key_count = session.exec(active_stmt).one()
 
     return templates.TemplateResponse(
         request,
@@ -61,8 +83,12 @@ def home(request: Request, current_user: User = Depends(require_user)) -> HTMLRe
 
 @router.get("/keys", response_class=HTMLResponse)
 def keys_page(request: Request, current_user: User = Depends(require_user)) -> HTMLResponse:
+    scoped = _user_filter_enabled(current_user)
     with get_session() as session:
-        keys = session.exec(select(HubKey).order_by(HubKey.created_at.desc())).all()
+        stmt = select(HubKey).order_by(HubKey.created_at.desc())
+        if scoped:
+            stmt = stmt.where(HubKey.user_id == current_user.id)
+        keys = session.exec(stmt).all()
     return templates.TemplateResponse(
         request,
         "keys.html",

@@ -15,7 +15,7 @@ from sqlmodel import select
 
 from ..auth import generate_key, require_admin
 from ..storage.db import get_session
-from ..storage.models import HubKey, UsageRecord
+from ..storage.models import HubKey, UsageRecord, User
 
 router = APIRouter(dependencies=[Depends(require_admin)])
 
@@ -25,6 +25,10 @@ class CreateKeyRequest(BaseModel):
     allowed_models: list[str] = Field(default_factory=list)
     daily_spend_cap_usd: float = 1.0
     rate_limit_per_min: int = 60
+    user_email: str | None = Field(
+        default=None,
+        description="Optional. If set, the key is attached to that user (must already exist).",
+    )
 
 
 class CreateKeyResponse(BaseModel):
@@ -34,18 +38,36 @@ class CreateKeyResponse(BaseModel):
     allowed_models: list[str]
     daily_spend_cap_usd: float
     rate_limit_per_min: int
+    user_id: int | None = None
+    user_email: str | None = None
 
 
 @router.post("/keys", response_model=CreateKeyResponse, status_code=status.HTTP_201_CREATED)
 def create_key(body: CreateKeyRequest) -> CreateKeyResponse:
     plaintext, hashed = generate_key()
     with get_session() as session:
+        user_id: int | None = None
+        user_email: str | None = None
+        if body.user_email:
+            normalized = body.user_email.strip().lower()
+            user_row = session.exec(
+                select(User).where(User.email == normalized)
+            ).first()
+            if not user_row:
+                raise HTTPException(
+                    status_code=status.HTTP_404_NOT_FOUND,
+                    detail=f"No user with email '{normalized}'. They must log in once first.",
+                )
+            user_id = user_row.id
+            user_email = user_row.email
+
         row = HubKey(
             name=body.name,
             hashed_secret=hashed,
             allowed_models=body.allowed_models,
             daily_spend_cap_usd=body.daily_spend_cap_usd,
             rate_limit_per_min=body.rate_limit_per_min,
+            user_id=user_id,
         )
         session.add(row)
         session.commit()
@@ -57,6 +79,8 @@ def create_key(body: CreateKeyRequest) -> CreateKeyResponse:
             allowed_models=row.allowed_models,
             daily_spend_cap_usd=row.daily_spend_cap_usd,
             rate_limit_per_min=row.rate_limit_per_min,
+            user_id=user_id,
+            user_email=user_email,
         )
 
 
@@ -74,6 +98,7 @@ def list_keys() -> list[dict[str, Any]]:
                 "created_at": r.created_at.isoformat(),
                 "revoked_at": r.revoked_at.isoformat() if r.revoked_at else None,
                 "active": r.revoked_at is None,
+                "user_id": r.user_id,
             }
             for r in rows
         ]
