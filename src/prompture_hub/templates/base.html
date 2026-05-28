@@ -1,0 +1,127 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>{% block title %}prompture-hub{% endblock %}</title>
+  <script src="https://cdn.tailwindcss.com"></script>
+  <script src="https://unpkg.com/htmx.org@2.0.3"></script>
+  <script src="https://unpkg.com/lucide@latest/dist/umd/lucide.min.js"></script>
+  <link rel="icon" type="image/svg+xml" href="data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 24 24' fill='none' stroke='%2334d399' stroke-width='2' stroke-linecap='round' stroke-linejoin='round'%3E%3Cpath d='M20 13c0 5-3.5 7.5-7.66 8.95a1 1 0 0 1-.67-.01C7.5 20.5 4 18 4 13V6a1 1 0 0 1 1-1c2 0 4.5-1.2 6.24-2.72a1.17 1.17 0 0 1 1.52 0C14.51 3.81 17 5 19 5a1 1 0 0 1 1 1z'/%3E%3Cpath d='m9 12 2 2 4-4'/%3E%3C/svg%3E" />
+  <style>
+    body {
+      font-family: ui-sans-serif, system-ui, -apple-system, "Segoe UI", Roboto, sans-serif;
+      background:
+        radial-gradient(ellipse 80% 50% at 50% -10%, rgba(16, 185, 129, 0.10), transparent 60%),
+        radial-gradient(ellipse 60% 40% at 100% 100%, rgba(99, 102, 241, 0.07), transparent 60%),
+        radial-gradient(ellipse 50% 30% at 0% 50%, rgba(244, 63, 94, 0.04), transparent 60%),
+        #020617;
+      min-height: 100vh;
+    }
+    code, pre, .mono {
+      font-family: ui-monospace, SFMono-Regular, "JetBrains Mono", Menlo, monospace;
+      font-feature-settings: "ss01" 1, "calt" 1;
+    }
+    @keyframes pulse-emerald {
+      0%, 100% { box-shadow: 0 0 0 0 rgba(52, 211, 153, 0.5); }
+      50%     { box-shadow: 0 0 0 4px rgba(52, 211, 153, 0); }
+    }
+    .pulse-dot { animation: pulse-emerald 2s infinite; }
+    ::-webkit-scrollbar { width: 10px; height: 10px; }
+    ::-webkit-scrollbar-track { background: transparent; }
+    ::-webkit-scrollbar-thumb { background: rgba(71, 85, 105, 0.4); border-radius: 5px; }
+    ::-webkit-scrollbar-thumb:hover { background: rgba(71, 85, 105, 0.7); }
+    .grid-bg {
+      background-image:
+        linear-gradient(rgba(148, 163, 184, 0.04) 1px, transparent 1px),
+        linear-gradient(90deg, rgba(148, 163, 184, 0.04) 1px, transparent 1px);
+      background-size: 32px 32px;
+    }
+    .copy-btn { opacity: 0; transition: opacity 0.15s; }
+    .group:hover .copy-btn { opacity: 1; }
+  </style>
+</head>
+<body class="text-slate-100">
+  <div class="absolute inset-0 grid-bg pointer-events-none opacity-40"></div>
+
+  <header class="relative border-b border-slate-800/60 backdrop-blur-lg bg-slate-950/40 sticky top-0 z-50">
+    <div class="max-w-6xl mx-auto px-6 py-3 flex items-center justify-between gap-6">
+      <a href="/" class="flex items-center gap-2.5 group shrink-0">
+        <div class="relative">
+          <div class="absolute inset-0 bg-emerald-400/30 blur-md group-hover:bg-emerald-400/60 transition-all"></div>
+          <i data-lucide="shield-check" class="w-6 h-6 text-emerald-400 relative"></i>
+        </div>
+        <div class="leading-none">
+          <div class="font-semibold tracking-tight text-base">
+            <span class="text-emerald-400">prompture</span><span class="text-slate-500">-</span><span class="text-slate-100">hub</span>
+          </div>
+          <div class="text-[9px] text-slate-500 mt-1 uppercase tracking-[0.2em] mono">v0.0.1 &middot; local</div>
+        </div>
+      </a>
+
+      <nav class="flex items-center gap-1 flex-1 justify-center">
+        {% set p = request.url.path %}
+        {% for href, label, icon in [('/', 'Dashboard', 'layout-dashboard'), ('/keys', 'Keys', 'key-round'), ('/models', 'Models', 'boxes')] %}
+        <a href="{{ href }}" class="px-3 py-1.5 rounded-md text-sm flex items-center gap-2 transition-all {% if (href == '/' and p == '/') or (href != '/' and p.startswith(href)) %}text-emerald-400 bg-emerald-400/10 ring-1 ring-emerald-400/20{% else %}text-slate-400 hover:text-slate-100 hover:bg-slate-800/50{% endif %}">
+          <i data-lucide="{{ icon }}" class="w-3.5 h-3.5"></i>
+          {{ label }}
+        </a>
+        {% endfor %}
+        <a href="/docs" target="_blank" class="px-3 py-1.5 rounded-md text-sm flex items-center gap-2 text-slate-400 hover:text-slate-100 hover:bg-slate-800/50 transition-all">
+          <i data-lucide="code-2" class="w-3.5 h-3.5"></i>
+          API
+          <i data-lucide="external-link" class="w-3 h-3 opacity-60"></i>
+        </a>
+      </nav>
+
+      <div class="flex items-center gap-2 text-xs shrink-0">
+        <span class="relative flex h-2 w-2">
+          <span class="animate-ping absolute inline-flex h-full w-full rounded-full bg-emerald-400 opacity-75"></span>
+          <span class="relative inline-flex rounded-full h-2 w-2 bg-emerald-400"></span>
+        </span>
+        <span class="text-emerald-400 font-medium tracking-wide">LIVE</span>
+      </div>
+    </div>
+  </header>
+
+  <main class="relative max-w-6xl mx-auto px-6 py-10">
+    {% block content %}{% endblock %}
+  </main>
+
+  <footer class="relative max-w-6xl mx-auto px-6 py-6 mt-16 border-t border-slate-800/40 text-xs text-slate-500 flex items-center justify-between flex-wrap gap-2">
+    <div class="flex items-center gap-3">
+      <span>prompture-hub <span class="mono text-slate-400">v0.0.1</span></span>
+      <span class="text-slate-700">&middot;</span>
+      <span class="mono">127.0.0.1:1984</span>
+      <span class="text-slate-700">&middot;</span>
+      <span>watching Big Brother since &apos;84</span>
+    </div>
+    <div class="flex items-center gap-4">
+      <a href="/docs" class="hover:text-slate-300 transition flex items-center gap-1.5">
+        <i data-lucide="book-open" class="w-3 h-3"></i> OpenAPI
+      </a>
+      <a href="/openapi.json" class="hover:text-slate-300 transition flex items-center gap-1.5 mono">
+        <i data-lucide="braces" class="w-3 h-3"></i> openapi.json
+      </a>
+    </div>
+  </footer>
+
+  <script>
+    function refreshIcons() { if (window.lucide) lucide.createIcons(); }
+    document.addEventListener('DOMContentLoaded', refreshIcons);
+    document.body.addEventListener('htmx:afterSwap', refreshIcons);
+
+    function copyCode(btn) {
+      const code = btn.parentElement.querySelector('code');
+      if (!code) return;
+      navigator.clipboard.writeText(code.innerText).then(() => {
+        const icon = btn.querySelector('i');
+        const old = icon.getAttribute('data-lucide');
+        icon.setAttribute('data-lucide', 'check');
+        refreshIcons();
+        setTimeout(() => { icon.setAttribute('data-lucide', old); refreshIcons(); }, 1200);
+      });
+    }
+  </script>
+</body>
+</html>

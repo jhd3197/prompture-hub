@@ -1,0 +1,25 @@
+services:
+  hub:
+    build: .
+    image: prompture-hub:latest
+    container_name: prompture-hub
+    restart: unless-stopped
+    env_file:
+      - .env
+    environment:
+      HUB_HOST: "0.0.0.0"
+      HUB_PORT: "1984"
+      HUB_DB_PATH: "/data/prompture_hub.db"
+    ports:
+      - "1984:1984"
+    volumes:
+      - hub_data:/data
+    healthcheck:
+      test: ["CMD", "curl", "-fsS", "http://127.0.0.1:1984/health"]
+      interval: 30s
+      timeout: 5s
+      retries: 3
+      start_period: 10s
+
+volumes:
+  hub_data:

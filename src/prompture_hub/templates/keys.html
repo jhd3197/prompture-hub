@@ -1,0 +1,134 @@
+{% extends "base.html" %}
+{% block title %}Keys &middot; prompture-hub{% endblock %}
+{% block content %}
+
+<div class="flex items-end justify-between mb-8 flex-wrap gap-4">
+  <div>
+    <h1 class="text-3xl font-bold tracking-tight">API keys</h1>
+    <p class="text-sm text-slate-400 mt-2">Scoped hub keys &middot; each one whitelists models and caps spend</p>
+  </div>
+  <div class="flex items-center gap-2 text-xs">
+    <span class="inline-flex items-center gap-1.5 px-3 py-1.5 rounded-full bg-slate-800/40 border border-slate-800 text-slate-400">
+      <i data-lucide="hash" class="w-3 h-3"></i>
+      {{ keys | length }} total
+    </span>
+    <span class="inline-flex items-center gap-1.5 px-3 py-1.5 rounded-full bg-emerald-500/10 border border-emerald-500/20 text-emerald-400">
+      <span class="w-1.5 h-1.5 rounded-full bg-emerald-400 pulse-dot"></span>
+      {{ keys | rejectattr('revoked_at') | list | length }} active
+    </span>
+  </div>
+</div>
+
+<div class="rounded-xl border border-slate-800/60 bg-slate-900/30 overflow-hidden backdrop-blur-sm mb-8">
+  <table class="w-full text-sm">
+    <thead class="bg-slate-900/60 text-slate-500 text-[10px] uppercase tracking-widest">
+      <tr>
+        <th class="text-left px-5 py-3 font-medium">Name</th>
+        <th class="text-left px-5 py-3 font-medium">Allowed models</th>
+        <th class="text-right px-5 py-3 font-medium">Spend cap</th>
+        <th class="text-right px-5 py-3 font-medium">Rate limit</th>
+        <th class="text-left px-5 py-3 font-medium">Created</th>
+        <th class="text-left px-5 py-3 font-medium">Status</th>
+      </tr>
+    </thead>
+    <tbody class="divide-y divide-slate-800/50">
+      {% for k in keys %}
+      <tr class="hover:bg-slate-800/20 transition-colors">
+        <td class="px-5 py-3 font-medium">{{ k.name }}</td>
+        <td class="px-5 py-3 text-xs">
+          {% if k.allowed_models %}
+            {% for m in k.allowed_models %}
+            <span class="inline-block mono text-slate-300 bg-slate-800/60 border border-slate-800 px-1.5 py-0.5 rounded mr-1 mb-1">{{ m }}</span>
+            {% endfor %}
+          {% else %}
+          <span class="text-slate-500 italic">any</span>
+          {% endif %}
+        </td>
+        <td class="px-5 py-3 text-right mono text-slate-300">${{ '%.2f' | format(k.daily_spend_cap_usd) }}<span class="text-slate-600 text-xs">/day</span></td>
+        <td class="px-5 py-3 text-right mono text-slate-300">{{ k.rate_limit_per_min }}<span class="text-slate-600 text-xs">/min</span></td>
+        <td class="px-5 py-3 text-slate-400 mono text-xs">{{ k.created_at.strftime('%Y-%m-%d %H:%M') }}</td>
+        <td class="px-5 py-3">
+          {% if k.revoked_at %}
+          <span class="inline-flex items-center gap-1.5 px-2 py-0.5 rounded-full bg-rose-500/10 text-rose-400 text-xs font-medium border border-rose-500/20">
+            <span class="w-1.5 h-1.5 rounded-full bg-rose-400"></span> revoked
+          </span>
+          {% else %}
+          <span class="inline-flex items-center gap-1.5 px-2 py-0.5 rounded-full bg-emerald-500/10 text-emerald-400 text-xs font-medium border border-emerald-500/20">
+            <span class="w-1.5 h-1.5 rounded-full bg-emerald-400 pulse-dot"></span> active
+          </span>
+          {% endif %}
+        </td>
+      </tr>
+      {% else %}
+      <tr>
+        <td colspan="6" class="px-5 py-16">
+          <div class="text-center">
+            <div class="relative inline-flex items-center justify-center w-16 h-16 mb-4">
+              <div class="absolute inset-0 bg-emerald-500/10 rounded-full blur-xl"></div>
+              <div class="relative w-16 h-16 rounded-full bg-slate-800/40 border border-slate-800 flex items-center justify-center">
+                <i data-lucide="key-round" class="w-6 h-6 text-slate-500"></i>
+              </div>
+            </div>
+            <p class="text-slate-300 text-base font-medium mb-1">No keys yet</p>
+            <p class="text-slate-500 text-sm">Issue your first hub key with <code class="text-slate-400 bg-slate-800/60 px-1.5 py-0.5 rounded mono text-xs">POST /admin/keys</code></p>
+          </div>
+        </td>
+      </tr>
+      {% endfor %}
+    </tbody>
+  </table>
+</div>
+
+<div class="grid grid-cols-1 lg:grid-cols-3 gap-4">
+  <div class="lg:col-span-2 rounded-xl border border-slate-800/60 bg-slate-900/30 p-6 backdrop-blur-sm">
+    <div class="flex items-center gap-2 mb-3">
+      <div class="rounded-md bg-emerald-500/10 border border-emerald-500/20 p-1.5">
+        <i data-lucide="terminal" class="w-3.5 h-3.5 text-emerald-400"></i>
+      </div>
+      <h2 class="font-semibold text-slate-100">Issue a new key</h2>
+    </div>
+    <p class="text-sm text-slate-400 mb-4">v0.1 ships API-only key management. A creation form lands in v0.2.</p>
+    <div class="relative bg-slate-950/70 border border-slate-800 rounded-lg p-4 group">
+      <div class="flex items-center justify-between mb-2">
+        <span class="text-[10px] uppercase tracking-widest text-slate-500">curl</span>
+        <span class="text-[10px] text-slate-600 mono">POST /admin/keys</span>
+      </div>
+      <pre class="text-xs text-slate-300 mono overflow-x-auto leading-relaxed"><code>curl -X POST http://localhost:1984/admin/keys \
+  -H "Authorization: Bearer $HUB_ADMIN_TOKEN" \
+  -H "Content-Type: application/json" \
+  -d '{
+    "name": "my-app",
+    "allowed_models": ["ollama/llama3.1:8b"],
+    "daily_spend_cap_usd": 1.0,
+    "rate_limit_per_min": 30
+  }'</code></pre>
+      <button onclick="copyCode(this)" class="copy-btn absolute top-2 right-2 p-1.5 rounded text-slate-500 hover:text-slate-200 hover:bg-slate-800/80 transition">
+        <i data-lucide="copy" class="w-3.5 h-3.5"></i>
+      </button>
+    </div>
+  </div>
+
+  <div class="rounded-xl border border-slate-800/60 bg-slate-900/30 p-6 backdrop-blur-sm">
+    <div class="flex items-center gap-2 mb-3">
+      <div class="rounded-md bg-indigo-500/10 border border-indigo-500/20 p-1.5">
+        <i data-lucide="shield" class="w-3.5 h-3.5 text-indigo-400"></i>
+      </div>
+      <h2 class="font-semibold text-slate-100">Security model</h2>
+    </div>
+    <ul class="text-xs text-slate-400 space-y-2.5">
+      {% for line in [
+        'Plaintext shown once at creation &mdash; only SHA-256 stored',
+        'Revoke locks the key instantly &mdash; no provider rotation needed',
+        'Real provider keys never leave the server',
+        'Admin token gates /admin/* on a separate credential',
+      ] %}
+      <li class="flex items-start gap-2">
+        <i data-lucide="check" class="w-3.5 h-3.5 text-emerald-400 mt-0.5 shrink-0"></i>
+        <span>{{ line | safe }}</span>
+      </li>
+      {% endfor %}
+    </ul>
+  </div>
+</div>
+
+{% endblock %}

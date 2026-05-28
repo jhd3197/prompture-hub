@@ -1,0 +1,215 @@
+{% extends "base.html" %}
+{% block title %}Dashboard &middot; prompture-hub{% endblock %}
+{% block content %}
+
+<div class="mb-10">
+  <h1 class="text-3xl font-bold tracking-tight">Dashboard</h1>
+  <p class="text-sm text-slate-400 mt-2">
+    Local-first LLM gateway &middot;
+    <span class="text-slate-300">{{ active_key_count }}</span> active key{{ 's' if active_key_count != 1 else '' }}
+    <span class="text-slate-700">&middot;</span>
+    last 24 hours
+  </p>
+</div>
+
+<section class="grid grid-cols-1 sm:grid-cols-3 gap-4 mb-10">
+  {% set cards = [
+    ('24h spend', '${:.4f}'.format(spend_24h), 'across ' ~ recent_usage|length ~ ' call' ~ ('s' if recent_usage|length != 1 else ''), 'dollar-sign', 'emerald'),
+    ('Active keys', active_key_count|string, 'gating /v1/*' if active_key_count else 'none yet', 'key-round', 'indigo'),
+    ('Recent calls', recent_usage|length|string, 'newest first &middot; live', 'activity', 'amber'),
+  ] %}
+  {% for label, value, sub, icon, color in cards %}
+  <div class="relative rounded-xl border border-slate-800/60 bg-gradient-to-br from-slate-900/80 to-slate-900/10 p-6 overflow-hidden group hover:border-slate-700 transition-all">
+    <div class="absolute -top-12 -right-12 w-32 h-32 bg-{{ color }}-500/10 blur-3xl group-hover:bg-{{ color }}-500/20 transition-all"></div>
+    <div class="relative">
+      <div class="flex items-center justify-between mb-4">
+        <span class="text-[10px] uppercase tracking-[0.18em] text-slate-500 font-medium">{{ label }}</span>
+        <div class="rounded-lg bg-{{ color }}-500/10 border border-{{ color }}-500/20 p-2">
+          <i data-lucide="{{ icon }}" class="w-4 h-4 text-{{ color }}-400"></i>
+        </div>
+      </div>
+      <div class="text-3xl font-bold tracking-tight text-{{ color }}-400 mono">{{ value }}</div>
+      <div class="text-xs text-slate-500 mt-2">{{ sub | safe }}</div>
+    </div>
+  </div>
+  {% endfor %}
+</section>
+
+{% if active_key_count == 0 %}
+<section class="mb-10">
+  <div class="relative rounded-xl border border-emerald-500/20 bg-gradient-to-br from-emerald-950/30 via-slate-900/40 to-slate-900/40 p-6 overflow-hidden">
+    <div class="absolute top-0 right-0 w-72 h-72 bg-emerald-500/5 blur-3xl"></div>
+    <div class="absolute bottom-0 left-1/2 w-72 h-32 bg-indigo-500/5 blur-3xl"></div>
+    <div class="relative">
+      <div class="flex items-center gap-2.5 mb-3">
+        <div class="rounded-md bg-emerald-500/15 border border-emerald-500/30 p-1.5">
+          <i data-lucide="sparkles" class="w-4 h-4 text-emerald-400"></i>
+        </div>
+        <h2 class="text-lg font-semibold">Get started &mdash; issue your first scoped key</h2>
+      </div>
+      <p class="text-sm text-slate-400 mb-5 max-w-2xl">
+        Hub keys are how untrusted apps call your provider LLMs without seeing the real credentials. Each one whitelists models and caps spend.
+      </p>
+      <div class="relative bg-slate-950/70 border border-slate-800 rounded-lg p-4 group">
+        <div class="flex items-center justify-between mb-2">
+          <span class="text-[10px] uppercase tracking-widest text-slate-500">curl example</span>
+          <span class="text-[10px] text-slate-600 mono">POST /admin/keys</span>
+        </div>
+        <pre class="text-xs text-slate-300 mono overflow-x-auto leading-relaxed"><code>curl -X POST http://localhost:1984/admin/keys \
+  -H "Authorization: Bearer $HUB_ADMIN_TOKEN" \
+  -H "Content-Type: application/json" \
+  -d '{
+    "name": "my-first-app",
+    "allowed_models": ["ollama/llama3.1:8b"],
+    "daily_spend_cap_usd": 1.0
+  }'</code></pre>
+        <button onclick="copyCode(this)" class="copy-btn absolute top-2 right-2 p-1.5 rounded text-slate-500 hover:text-slate-200 hover:bg-slate-800/80 transition">
+          <i data-lucide="copy" class="w-3.5 h-3.5"></i>
+        </button>
+      </div>
+      <p class="text-xs text-slate-500 mt-3 flex items-center gap-1.5">
+        <i data-lucide="info" class="w-3 h-3"></i>
+        Don&apos;t have <code class="text-slate-400 bg-slate-800/60 px-1 py-0.5 rounded mono">$HUB_ADMIN_TOKEN</code>? Set it in <code class="text-slate-400 bg-slate-800/60 px-1 py-0.5 rounded mono">.env</code> and restart the hub.
+      </p>
+    </div>
+  </div>
+</section>
+{% endif %}
+
+<section class="mb-10">
+  <div class="flex items-center justify-between mb-4">
+    <div class="flex items-center gap-2">
+      <i data-lucide="key" class="w-4 h-4 text-slate-500"></i>
+      <h2 class="text-lg font-semibold">Recent keys</h2>
+    </div>
+    <a href="/keys" class="text-sm text-emerald-400 hover:text-emerald-300 flex items-center gap-1.5 transition">
+      View all <i data-lucide="arrow-right" class="w-3.5 h-3.5"></i>
+    </a>
+  </div>
+  <div class="rounded-xl border border-slate-800/60 bg-slate-900/30 overflow-hidden backdrop-blur-sm">
+    <table class="w-full text-sm">
+      <thead class="bg-slate-900/60 text-slate-500 text-[10px] uppercase tracking-widest">
+        <tr>
+          <th class="text-left px-5 py-3 font-medium">Name</th>
+          <th class="text-left px-5 py-3 font-medium">Allowed models</th>
+          <th class="text-right px-5 py-3 font-medium">Spend cap</th>
+          <th class="text-left px-5 py-3 font-medium">Status</th>
+        </tr>
+      </thead>
+      <tbody class="divide-y divide-slate-800/50">
+        {% for k in keys %}
+        <tr class="hover:bg-slate-800/20 transition-colors">
+          <td class="px-5 py-3 font-medium">{{ k.name }}</td>
+          <td class="px-5 py-3 text-xs">
+            {% if k.allowed_models %}
+              {% for m in k.allowed_models %}
+              <span class="inline-block mono text-slate-300 bg-slate-800/60 border border-slate-800 px-1.5 py-0.5 rounded mr-1 mb-1">{{ m }}</span>
+              {% endfor %}
+            {% else %}
+            <span class="text-slate-500 italic">any</span>
+            {% endif %}
+          </td>
+          <td class="px-5 py-3 text-right mono text-slate-300">${{ '%.2f' | format(k.daily_spend_cap_usd) }}<span class="text-slate-600 text-xs">/day</span></td>
+          <td class="px-5 py-3">
+            {% if k.revoked_at %}
+            <span class="inline-flex items-center gap-1.5 px-2 py-0.5 rounded-full bg-rose-500/10 text-rose-400 text-xs font-medium border border-rose-500/20">
+              <span class="w-1.5 h-1.5 rounded-full bg-rose-400"></span> revoked
+            </span>
+            {% else %}
+            <span class="inline-flex items-center gap-1.5 px-2 py-0.5 rounded-full bg-emerald-500/10 text-emerald-400 text-xs font-medium border border-emerald-500/20">
+              <span class="w-1.5 h-1.5 rounded-full bg-emerald-400 pulse-dot"></span> active
+            </span>
+            {% endif %}
+          </td>
+        </tr>
+        {% else %}
+        <tr>
+          <td colspan="4" class="px-5 py-14">
+            <div class="text-center">
+              <div class="relative inline-flex items-center justify-center w-14 h-14 mb-3">
+                <div class="absolute inset-0 bg-slate-700/20 rounded-full blur-lg"></div>
+                <div class="relative w-14 h-14 rounded-full bg-slate-800/40 border border-slate-800 flex items-center justify-center">
+                  <i data-lucide="key" class="w-5 h-5 text-slate-600"></i>
+                </div>
+              </div>
+              <p class="text-slate-400 text-sm font-medium">No keys yet</p>
+              <p class="text-slate-600 text-xs mt-1">Use the quickstart above to create one</p>
+            </div>
+          </td>
+        </tr>
+        {% endfor %}
+      </tbody>
+    </table>
+  </div>
+</section>
+
+<section>
+  <div class="flex items-center justify-between mb-4">
+    <div class="flex items-center gap-2">
+      <i data-lucide="activity" class="w-4 h-4 text-slate-500"></i>
+      <h2 class="text-lg font-semibold">Recent activity</h2>
+    </div>
+    <span class="text-xs text-slate-500 flex items-center gap-1.5">
+      <span class="relative flex h-1.5 w-1.5">
+        <span class="animate-ping absolute inline-flex h-full w-full rounded-full bg-emerald-400 opacity-75"></span>
+        <span class="relative inline-flex rounded-full h-1.5 w-1.5 bg-emerald-400"></span>
+      </span>
+      live &middot; last 10
+    </span>
+  </div>
+  <div class="rounded-xl border border-slate-800/60 bg-slate-900/30 overflow-hidden backdrop-blur-sm">
+    <table class="w-full text-sm">
+      <thead class="bg-slate-900/60 text-slate-500 text-[10px] uppercase tracking-widest">
+        <tr>
+          <th class="text-left px-5 py-3 font-medium">Time</th>
+          <th class="text-left px-5 py-3 font-medium">Model</th>
+          <th class="text-left px-5 py-3 font-medium">Endpoint</th>
+          <th class="text-right px-5 py-3 font-medium">Tokens</th>
+          <th class="text-right px-5 py-3 font-medium">Cost</th>
+          <th class="text-right px-5 py-3 font-medium">Latency</th>
+          <th class="text-left px-5 py-3 font-medium">Status</th>
+        </tr>
+      </thead>
+      <tbody class="divide-y divide-slate-800/50">
+        {% for u in recent_usage %}
+        <tr class="hover:bg-slate-800/20 transition-colors">
+          <td class="px-5 py-3 text-slate-400 mono text-xs">{{ u.timestamp.strftime('%H:%M:%S') }}</td>
+          <td class="px-5 py-3 mono text-xs text-slate-200">{{ u.model }}</td>
+          <td class="px-5 py-3 text-slate-400 mono text-xs">{{ u.endpoint }}</td>
+          <td class="px-5 py-3 text-right mono text-xs">{{ u.total_tokens }}</td>
+          <td class="px-5 py-3 text-right mono text-xs">${{ '%.5f' | format(u.cost_usd) }}</td>
+          <td class="px-5 py-3 text-right mono text-xs text-slate-400">{{ u.latency_ms }}<span class="text-slate-600">ms</span></td>
+          <td class="px-5 py-3">
+            {% if u.status == 'ok' %}
+            <span class="inline-flex items-center gap-1.5 px-2 py-0.5 rounded-full bg-emerald-500/10 text-emerald-400 text-xs font-medium border border-emerald-500/20">
+              <span class="w-1.5 h-1.5 rounded-full bg-emerald-400"></span> ok
+            </span>
+            {% else %}
+            <span class="inline-flex items-center gap-1.5 px-2 py-0.5 rounded-full bg-rose-500/10 text-rose-400 text-xs font-medium border border-rose-500/20">
+              <span class="w-1.5 h-1.5 rounded-full bg-rose-400"></span> {{ u.status }}
+            </span>
+            {% endif %}
+          </td>
+        </tr>
+        {% else %}
+        <tr>
+          <td colspan="7" class="px-5 py-14">
+            <div class="text-center">
+              <div class="relative inline-flex items-center justify-center w-14 h-14 mb-3">
+                <div class="absolute inset-0 bg-amber-500/10 rounded-full blur-lg"></div>
+                <div class="relative w-14 h-14 rounded-full bg-slate-800/40 border border-slate-800 flex items-center justify-center">
+                  <i data-lucide="zap" class="w-5 h-5 text-slate-600"></i>
+                </div>
+              </div>
+              <p class="text-slate-400 text-sm font-medium">No calls yet</p>
+              <p class="text-slate-600 text-xs mt-1">Once a hub key calls /v1/*, it&apos;ll land here in real time</p>
+            </div>
+          </td>
+        </tr>
+        {% endfor %}
+      </tbody>
+    </table>
+  </div>
+</section>
+
+{% endblock %}
