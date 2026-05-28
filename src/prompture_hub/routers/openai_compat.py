@@ -1,22 +1,27 @@
 """OpenAI-compatible endpoints.
 
-- ``POST /v1/chat/completions`` — drop-in chat completions; routes to Prompture driver registry.
+- ``POST /v1/chat/completions`` — drop-in chat completions; routes to Prompture
+  driver registry. Streaming (``stream: true``) returns an SSE event stream in
+  OpenAI's chunk shape, terminated by ``data: [DONE]``.
 - ``GET  /v1/models``           — lists models the calling key is allowed to use.
 
-v0.1 limitations (planned for v0.2):
-- No streaming (``stream: true`` returns 501).
-- ``messages`` are flattened to a single prompt string for ``driver.generate()``;
-  per-provider chat templating is left to the driver. Most Prompture drivers DTRT.
+v0.1 limitations:
+- ``messages`` are flattened to a single prompt string for non-streaming calls
+  (``driver.generate``). Streaming uses ``driver.generate_messages_stream`` so
+  the chat shape is preserved for drivers that support it.
 - No ``/v1/embeddings`` yet.
 """
 
 from __future__ import annotations
 
+import json
 import time
 import uuid
+from collections.abc import Iterator
 from typing import Any
 
 from fastapi import APIRouter, Depends, HTTPException, status
+from fastapi.responses import StreamingResponse
 from pydantic import BaseModel
 
 from ..auth import require_hub_key
@@ -44,16 +49,14 @@ class ChatCompletionsRequest(BaseModel):
     persist: bool = True
 
 
-@router.post("/chat/completions")
-async def chat_completions(
-    body: ChatCompletionsRequest,
-    key: HubKey = Depends(enforce_quotas),
-) -> dict[str, Any]:
-    if body.stream:
-        raise HTTPException(
-            status_code=status.HTTP_501_NOT_IMPLEMENTED,
-            detail="Streaming not implemented in v0.1; planned for v0.2.",
-        )
+def _gate_and_prepare(
+    body: ChatCompletionsRequest, key: HubKey,
+) -> tuple[list[ChatMessage], dict[str, Any]]:
+    """Shared pre-flight for streaming and non-streaming.
+
+    Validates the model whitelist + conversation ownership, replays prior
+    messages when ``conversation_id`` is set, and assembles driver options.
+    """
     if key.allowed_models and body.model not in key.allowed_models:
         raise HTTPException(
             status_code=status.HTTP_403_FORBIDDEN,
@@ -69,17 +72,10 @@ async def chat_completions(
                     detail="conversation_id not found.",
                 )
         prior = load_history(body.conversation_id)
-        history: list[ChatMessage] = [
-            ChatMessage(role=p["role"], content=p["content"]) for p in prior
-        ]
+        history = [ChatMessage(role=p["role"], content=p["content"]) for p in prior]
         full_messages = history + list(body.messages)
     else:
         full_messages = list(body.messages)
-
-    from prompture.drivers import get_driver_for_model
-
-    driver = get_driver_for_model(body.model)
-    prompt = _messages_to_prompt(full_messages)
 
     options: dict[str, Any] = {}
     if body.temperature is not None:
@@ -89,12 +85,33 @@ async def chat_completions(
     if body.top_p is not None:
         options["top_p"] = body.top_p
 
+    return full_messages, options
+
+
+@router.post("/chat/completions")
+async def chat_completions(
+    body: ChatCompletionsRequest,
+    key: HubKey = Depends(enforce_quotas),
+):
+    full_messages, options = _gate_and_prepare(body, key)
+
+    from prompture.drivers import get_driver_for_model
+
+    driver = get_driver_for_model(body.model)
+
+    if body.stream:
+        return _stream_response(driver, body, key, full_messages, options)
+
+    prompt = _messages_to_prompt(full_messages)
     started = time.perf_counter()
     try:
         result = driver.generate(prompt, options)
     except Exception as exc:
         _record(key.id, body.model, "/v1/chat/completions", 0, 0, 0.0, 0, "error", str(exc))
-        raise HTTPException(status_code=status.HTTP_502_BAD_GATEWAY, detail=str(exc)) from exc
+        raise HTTPException(
+            status_code=status.HTTP_502_BAD_GATEWAY,
+            detail=str(exc),
+        ) from exc
     elapsed_ms = int((time.perf_counter() - started) * 1000)
 
     text = result.get("text", "")
@@ -144,6 +161,125 @@ async def chat_completions(
         },
         "conversation_id": body.conversation_id,
     }
+
+
+# ---------------------------------------------------------------------------
+# Streaming
+# ---------------------------------------------------------------------------
+
+
+def _sse(payload: dict[str, Any] | str) -> str:
+    """Format an SSE line. Strings (e.g. ``[DONE]``) are passed through."""
+    if isinstance(payload, str):
+        return f"data: {payload}\n\n"
+    return f"data: {json.dumps(payload, separators=(',', ':'))}\n\n"
+
+
+def _chunk(stream_id: str, model: str, delta: dict[str, Any], finish: str | None) -> dict[str, Any]:
+    return {
+        "id": stream_id,
+        "object": "chat.completion.chunk",
+        "created": int(time.time()),
+        "model": model,
+        "choices": [{"index": 0, "delta": delta, "finish_reason": finish}],
+    }
+
+
+def _stream_response(
+    driver: Any,
+    body: ChatCompletionsRequest,
+    key: HubKey,
+    full_messages: list[ChatMessage],
+    options: dict[str, Any],
+) -> StreamingResponse:
+    if not hasattr(driver, "generate_messages_stream"):
+        raise HTTPException(
+            status_code=status.HTTP_400_BAD_REQUEST,
+            detail=(
+                f"Driver for '{body.model}' does not support streaming. "
+                "Retry with stream=false."
+            ),
+        )
+
+    stream_id = f"chatcmpl-{uuid.uuid4().hex[:24]}"
+    msgs_for_driver = [{"role": m.role, "content": m.content} for m in full_messages]
+
+    def event_gen() -> Iterator[str]:
+        started = time.perf_counter()
+        full_text = ""
+        prompt_tok = 0
+        completion_tok = 0
+        cost = 0.0
+
+        # Role chunk first — matches OpenAI's protocol so SDKs initialize cleanly.
+        yield _sse(_chunk(stream_id, body.model, {"role": "assistant"}, None))
+
+        try:
+            for event in driver.generate_messages_stream(msgs_for_driver, options):
+                kind = event.get("type")
+                if kind == "delta":
+                    text = event.get("text", "")
+                    if text:
+                        full_text += text
+                        yield _sse(_chunk(stream_id, body.model, {"content": text}, None))
+                elif kind == "done":
+                    meta = event.get("meta", {}) or {}
+                    full_text = event.get("text", full_text) or full_text
+                    prompt_tok = int(meta.get("prompt_tokens", 0))
+                    completion_tok = int(meta.get("completion_tokens", 0))
+                    cost = float(meta.get("cost", 0.0))
+        except Exception as exc:
+            elapsed = int((time.perf_counter() - started) * 1000)
+            _record(
+                key.id, body.model, "/v1/chat/completions",
+                prompt_tok, completion_tok, cost, elapsed, "error", str(exc),
+            )
+            # OpenAI clients tolerate an "error" data event followed by [DONE].
+            yield _sse({"error": {"message": str(exc), "type": "driver_error"}})
+            yield _sse("[DONE]")
+            return
+
+        elapsed_ms = int((time.perf_counter() - started) * 1000)
+
+        # Final delta with finish_reason=stop, then [DONE].
+        yield _sse(_chunk(stream_id, body.model, {}, "stop"))
+        yield _sse("[DONE]")
+
+        _record(
+            key.id, body.model, "/v1/chat/completions",
+            prompt_tok, completion_tok, cost, elapsed_ms, "ok", None,
+        )
+
+        if body.conversation_id and body.persist:
+            new_items: list[dict[str, Any]] = [
+                {"role": m.role, "content": m.content} for m in body.messages
+            ]
+            new_items.append(
+                {
+                    "role": "assistant",
+                    "content": full_text,
+                    "prompt_tokens": prompt_tok,
+                    "completion_tokens": completion_tok,
+                    "total_tokens": prompt_tok + completion_tok,
+                    "cost_usd": cost,
+                }
+            )
+            append_messages(body.conversation_id, new_items)
+
+    return StreamingResponse(
+        event_gen(),
+        media_type="text/event-stream",
+        headers={
+            "Cache-Control": "no-cache, no-transform",
+            "X-Accel-Buffering": "no",
+            "Connection": "keep-alive",
+        },
+    )
+
+
+# ---------------------------------------------------------------------------
+# Models listing
+# ---------------------------------------------------------------------------
 
 
 @router.get("/models")
