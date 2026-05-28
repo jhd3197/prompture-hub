@@ -20,6 +20,7 @@ from fastapi import APIRouter, Depends, HTTPException, status
 from pydantic import BaseModel
 
 from ..auth import require_hub_key
+from ..quotas import enforce_quotas
 from ..storage.db import get_session
 from ..storage.models import Conversation, HubKey, UsageRecord
 from .conversations import append_messages, load_history
@@ -46,7 +47,7 @@ class ChatCompletionsRequest(BaseModel):
 @router.post("/chat/completions")
 async def chat_completions(
     body: ChatCompletionsRequest,
-    key: HubKey = Depends(require_hub_key),
+    key: HubKey = Depends(enforce_quotas),
 ) -> dict[str, Any]:
     if body.stream:
         raise HTTPException(

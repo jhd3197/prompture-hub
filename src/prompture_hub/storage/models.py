@@ -46,7 +46,10 @@ class UsageRecord(SQLModel, table=True):
     total_tokens: int = Field(default=0)
     cost_usd: float = Field(default=0.0)
     latency_ms: int = Field(default=0)
-    status: str = Field(default="ok", description="ok | error | quota_exceeded")
+    status: str = Field(
+        default="ok",
+        description="ok | error | quota_exceeded | rate_limited",
+    )
     error: Optional[str] = Field(default=None)
     timestamp: datetime = Field(default_factory=_utcnow, index=True)
 

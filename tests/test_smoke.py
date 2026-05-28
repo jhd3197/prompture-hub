@@ -42,11 +42,10 @@ def test_openapi_renders():
     assert r.json()["info"]["title"] == "prompture-hub"
 
 
-def test_home_renders_html():
-    r = _client().get("/")
-    assert r.status_code == 200
-    assert "text/html" in r.headers["content-type"]
-    assert "prompture" in r.text
+def test_home_redirects_to_spa():
+    r = _client().get("/", follow_redirects=False)
+    assert r.status_code == 302
+    assert r.headers["location"] == "/app/"
 
 
 def test_admin_requires_token():

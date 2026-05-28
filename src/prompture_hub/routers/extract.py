@@ -18,7 +18,7 @@ from typing import Any
 from fastapi import APIRouter, Depends, HTTPException, status
 from pydantic import BaseModel, ConfigDict, Field
 
-from ..auth import require_hub_key
+from ..quotas import enforce_quotas
 from ..storage.db import get_session
 from ..storage.models import HubKey, UsageRecord
 
@@ -42,7 +42,7 @@ class ExtractRequest(BaseModel):
 @router.post("/extract")
 async def extract(
     body: ExtractRequest,
-    key: HubKey = Depends(require_hub_key),
+    key: HubKey = Depends(enforce_quotas),
 ) -> dict[str, Any]:
     if key.allowed_models and body.model not in key.allowed_models:
         raise HTTPException(
