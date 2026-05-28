@@ -1,8 +1,9 @@
 import { useEffect, useMemo, useState } from "react";
 import { api } from "../api";
 import { EmptyState } from "../components/EmptyState";
+import { SnippetModal } from "../components/SnippetModal";
 import {
-  IconAlert, IconChevronRight, IconGrid, IconKey, IconLayers,
+  IconAlert, IconChevronRight, IconCopy, IconGrid, IconKey, IconLayers,
   IconRefresh, IconRoute, IconSearch, IconX,
 } from "../icons";
 import type { ModelsResponse, ProviderGroup } from "../types";
@@ -33,11 +34,12 @@ function RoutingExplain() {
 }
 
 function ProviderRow({
-  group, query, forceOpen,
+  group, query, forceOpen, onPick,
 }: {
   group: ProviderGroup;
   query: string;
   forceOpen: boolean;
+  onPick: (route: string) => void;
 }) {
   const [open, setOpen] = useState(false);
   const isOpen = forceOpen || open;
@@ -87,17 +89,36 @@ function ProviderRow({
 
       {isOpen && (
         <div className="model-table">
-          {matched.map(model => (
-            <div className="model-row" key={`${group.provider}/${model}`}>
-              <div style={{ minWidth: 0 }}>
-                <span className="route-pill" title={`${group.provider}/${model}`}>
-                  <span className="rp-prov">{group.provider}</span>
-                  <span className="rp-sep">/</span>
-                  <span className="rp-model">{model}</span>
+          {matched.map(model => {
+            const route = `${group.provider}/${model}`;
+            return (
+              <div
+                className="model-row"
+                key={route}
+                onClick={() => onPick(route)}
+                role="button"
+                tabIndex={0}
+                onKeyDown={e => {
+                  if (e.key === "Enter") onPick(route);
+                }}
+              >
+                <div style={{ minWidth: 0 }}>
+                  <span className="route-pill" title={route}>
+                    <span className="rp-prov">{group.provider}</span>
+                    <span className="rp-sep">/</span>
+                    <span className="rp-model">{model}</span>
+                  </span>
+                </div>
+                <span
+                  className="row"
+                  style={{ gap: 5, color: "var(--text-3)", fontSize: 12 }}
+                >
+                  <IconCopy style={{ width: 13, height: 13 }} />
+                  snippet
                 </span>
               </div>
-            </div>
-          ))}
+            );
+          })}
         </div>
       )}
     </div>
@@ -109,6 +130,7 @@ export function ModelsPage() {
   const [error, setError] = useState<string | null>(null);
   const [loading, setLoading] = useState(true);
   const [query, setQuery] = useState("");
+  const [picked, setPicked] = useState<string | null>(null);
 
   const load = async () => {
     setLoading(true);
@@ -210,9 +232,12 @@ export function ModelsPage() {
             group={g}
             query={query}
             forceOpen={!!query}
+            onPick={setPicked}
           />
         ))
       )}
+
+      {picked && <SnippetModal route={picked} onClose={() => setPicked(null)} />}
     </div>
   );
 }
