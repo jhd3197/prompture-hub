@@ -74,12 +74,27 @@
         </a>
       </nav>
 
-      <div class="flex items-center gap-2 text-xs shrink-0">
+      <div class="flex items-center gap-3 text-xs shrink-0">
         <span class="relative flex h-2 w-2">
           <span class="animate-ping absolute inline-flex h-full w-full rounded-full bg-emerald-400 opacity-75"></span>
           <span class="relative inline-flex rounded-full h-2 w-2 bg-emerald-400"></span>
         </span>
         <span class="text-emerald-400 font-medium tracking-wide">LIVE</span>
+        {% if current_user and current_user.email and current_user.provider != 'none' %}
+        <div class="flex items-center gap-2 pl-3 ml-1 border-l border-slate-800">
+          {% if current_user.avatar_url %}
+          <img src="{{ current_user.avatar_url }}" class="w-6 h-6 rounded-full ring-1 ring-slate-700" alt="" />
+          {% else %}
+          <div class="w-6 h-6 rounded-full bg-emerald-400/20 ring-1 ring-emerald-400/30 flex items-center justify-center text-[10px] text-emerald-300 mono">
+            {{ current_user.email[0]|upper }}
+          </div>
+          {% endif %}
+          <span class="text-slate-400 mono text-[11px] hidden sm:inline">{{ current_user.email }}</span>
+          <a href="/auth/logout" class="text-slate-500 hover:text-rose-400 transition" title="Log out">
+            <i data-lucide="log-out" class="w-3.5 h-3.5"></i>
+          </a>
+        </div>
+        {% endif %}
       </div>
     </div>
   </header>

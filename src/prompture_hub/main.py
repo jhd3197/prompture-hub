@@ -6,10 +6,13 @@ import logging
 import os
 from contextlib import asynccontextmanager
 
-from fastapi import FastAPI
+from fastapi import FastAPI, Request
+from fastapi.responses import RedirectResponse
 from fastapi.staticfiles import StaticFiles
+from starlette.middleware.sessions import SessionMiddleware
 
-from .routers import admin, conversations, dashboard, extract, openai_compat
+from .auth import LoginRequired
+from .routers import admin, auth as auth_router, conversations, dashboard, extract, openai_compat
 from .settings import get_settings
 from .storage.db import init_db
 
@@ -35,10 +38,26 @@ def create_app() -> FastAPI:
         lifespan=lifespan,
     )
 
+    settings = get_settings()
+    if settings.session_secret:
+        app.add_middleware(
+            SessionMiddleware,
+            secret_key=settings.session_secret,
+            session_cookie=settings.session_cookie_name,
+            max_age=settings.session_max_age,
+            same_site="lax",
+            https_only=settings.base_url.startswith("https://"),
+        )
+
+    @app.exception_handler(LoginRequired)
+    async def _login_required_handler(_request: Request, exc: LoginRequired):
+        return RedirectResponse(url=exc.target, status_code=302)
+
     app.include_router(openai_compat.router, prefix="/v1", tags=["openai-compat"])
     app.include_router(extract.router, prefix="/v1", tags=["prompture-native"])
     app.include_router(conversations.router, prefix="/v1", tags=["conversations"])
     app.include_router(admin.router, prefix="/admin", tags=["admin"])
+    app.include_router(auth_router.router, prefix="/auth", tags=["auth"])
     app.include_router(dashboard.router, tags=["dashboard"])
 
     @app.get("/health", tags=["meta"])

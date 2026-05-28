@@ -14,12 +14,12 @@ import hashlib
 import secrets
 from typing import Annotated
 
-from fastapi import Depends, Header, HTTPException, status
+from fastapi import Depends, Header, HTTPException, Request, status
 from sqlmodel import select
 
 from .settings import HubSettings, get_settings
 from .storage.db import get_session
-from .storage.models import HubKey
+from .storage.models import HubKey, User
 
 KEY_PREFIX = "ph_"
 
@@ -61,6 +61,50 @@ async def require_admin(
             detail="Invalid admin token.",
             headers={"WWW-Authenticate": "Bearer"},
         )
+
+
+class LoginRequired(Exception):
+    """Raised from require_user; main.py installs a handler that returns
+    a RedirectResponse to ``/auth/login`` so browsers flow into OAuth."""
+
+    def __init__(self, target: str = "/auth/login") -> None:
+        self.target = target
+
+
+def require_user(request: Request) -> User:
+    """Gate a dashboard route. Returns the logged-in :class:`User` row.
+
+    Browser requests get redirected to ``/auth/login`` (via :class:`LoginRequired`).
+    JSON clients (Accept: application/json) get a 401.
+    """
+    settings = get_settings()
+    if not settings.auth_enabled:
+        # Auth not configured — fall back to open mode so localhost dev still works.
+        return User(
+            id=0,
+            email="local@localhost",
+            name="local",
+            provider="none",
+            provider_user_id="0",
+        )
+
+    user_id = request.session.get("user_id") if hasattr(request, "session") else None
+    if not user_id:
+        accept = (request.headers.get("accept") or "").lower()
+        if "application/json" in accept and "text/html" not in accept:
+            raise HTTPException(
+                status_code=status.HTTP_401_UNAUTHORIZED,
+                detail="Login required.",
+            )
+        raise LoginRequired()
+
+    with get_session() as session:
+        user = session.get(User, user_id)
+    if not user or user.email.lower() not in settings.allowed_email_set:
+        if hasattr(request, "session"):
+            request.session.clear()
+        raise LoginRequired(target="/auth/login?error=email_not_allowlisted")
+    return user
 
 
 async def require_hub_key(

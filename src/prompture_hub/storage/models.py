@@ -31,6 +31,7 @@ class HubKey(SQLModel, table=True):
     rate_limit_per_min: int = Field(default=60)
     created_at: datetime = Field(default_factory=_utcnow)
     revoked_at: Optional[datetime] = Field(default=None, index=True)
+    user_id: Optional[int] = Field(default=None, index=True, foreign_key="user.id")
 
 
 class UsageRecord(SQLModel, table=True):
@@ -48,6 +49,24 @@ class UsageRecord(SQLModel, table=True):
     status: str = Field(default="ok", description="ok | error | quota_exceeded")
     error: Optional[str] = Field(default=None)
     timestamp: datetime = Field(default_factory=_utcnow, index=True)
+
+
+class User(SQLModel, table=True):
+    """A dashboard user authenticated via OAuth (Google or GitHub).
+
+    Allowlist enforcement is in the auth router — presence in this table only
+    means the user successfully completed the OAuth dance at least once.
+    """
+
+    id: Optional[int] = Field(default=None, primary_key=True)
+    email: str = Field(index=True, unique=True)
+    name: Optional[str] = Field(default=None)
+    avatar_url: Optional[str] = Field(default=None)
+    provider: str = Field(description="google | github")
+    provider_user_id: str = Field(index=True)
+    is_admin: bool = Field(default=True, description="Solo-mode: every allowlisted user is admin.")
+    created_at: datetime = Field(default_factory=_utcnow)
+    last_login_at: datetime = Field(default_factory=_utcnow)
 
 
 def _new_conv_id() -> str:

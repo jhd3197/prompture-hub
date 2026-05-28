@@ -29,6 +29,43 @@ class HubSettings(BaseSettings):
     host: str = Field(default="127.0.0.1")
     port: int = Field(default=1984)
 
+    base_url: str = Field(
+        default="http://localhost:1984",
+        description="Public base URL of this hub; used to build OAuth callback URLs.",
+    )
+    session_secret: str = Field(
+        default="",
+        description="Secret used to sign session cookies. If empty, dashboard login is disabled.",
+    )
+    session_cookie_name: str = Field(default="hub_session")
+    session_max_age: int = Field(default=60 * 60 * 24 * 14, description="Seconds.")
+    allowed_emails: str = Field(
+        default="",
+        description="Comma-separated email allowlist for dashboard login. Empty = no logins allowed.",
+    )
+
+    google_client_id: str = Field(default="")
+    google_client_secret: str = Field(default="")
+
+    github_client_id: str = Field(default="")
+    github_client_secret: str = Field(default="")
+
+    @property
+    def allowed_email_set(self) -> set[str]:
+        return {e.strip().lower() for e in self.allowed_emails.split(",") if e.strip()}
+
+    @property
+    def google_enabled(self) -> bool:
+        return bool(self.google_client_id and self.google_client_secret)
+
+    @property
+    def github_enabled(self) -> bool:
+        return bool(self.github_client_id and self.github_client_secret)
+
+    @property
+    def auth_enabled(self) -> bool:
+        return bool(self.session_secret) and (self.google_enabled or self.github_enabled)
+
 
 @lru_cache(maxsize=1)
 def get_settings() -> HubSettings:

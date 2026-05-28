@@ -98,6 +98,42 @@ curl http://localhost:1984/v1/conversations/conv_... \
 
 Set `"persist": false` on a chat request to use the session as read-only history without recording the new turn. Conversations are scoped to the HubKey that created them.
 
+## Dashboard login (Google / GitHub OAuth)
+
+The HTML dashboard at `/` is gated behind OAuth login when configured. Programmatic clients (`/v1/*`, `/admin/*`) are unaffected — they keep using hub-issued keys / `HUB_ADMIN_TOKEN`.
+
+**Setup:**
+
+1. Generate a session secret:
+   ```bash
+   python -c "import secrets;print(secrets.token_urlsafe(48))"
+   ```
+   Put it in `.env` as `HUB_SESSION_SECRET=...`.
+
+2. Set your public URL — this is what OAuth providers will redirect back to:
+   ```env
+   HUB_BASE_URL=http://localhost:1984        # or https://hub.yourdomain.com
+   ```
+
+3. Set the **allowlist** (emails that may log in). Empty = nobody can log in.
+   ```env
+   HUB_ALLOWED_EMAILS=you@example.com,teammate@example.com
+   ```
+
+4. Create the OAuth apps you want (one or both):
+
+   **Google** — https://console.cloud.google.com/apis/credentials → OAuth client ID → Web application
+   - Authorized redirect URI: `{HUB_BASE_URL}/auth/google/callback`
+   - Paste the client id/secret into `HUB_GOOGLE_CLIENT_ID` / `HUB_GOOGLE_CLIENT_SECRET`
+
+   **GitHub** — https://github.com/settings/developers → New OAuth App
+   - Authorization callback URL: `{HUB_BASE_URL}/auth/github/callback`
+   - Paste into `HUB_GITHUB_CLIENT_ID` / `HUB_GITHUB_CLIENT_SECRET`
+
+5. Restart the hub. Visit `/` and you'll be redirected to `/auth/login`.
+
+**Fallback (dev-only):** if `HUB_SESSION_SECRET` is empty *or* neither OAuth provider is configured, login is disabled and `require_user` falls back to localhost-open mode — convenient for solo dev, **never** safe for a public deployment. Always set a session secret + provider + allowlist before exposing the hub.
+
 ## Run on Linux with Docker
 
 ```bash

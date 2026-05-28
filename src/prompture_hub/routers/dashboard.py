@@ -10,14 +10,15 @@ from __future__ import annotations
 import os
 from datetime import datetime, timedelta, timezone
 
-from fastapi import APIRouter, Request
+from fastapi import APIRouter, Depends, Request
 from fastapi.responses import HTMLResponse
 from fastapi.templating import Jinja2Templates
 from sqlalchemy import func
 from sqlmodel import select
 
+from ..auth import require_user
 from ..storage.db import get_session
-from ..storage.models import HubKey, UsageRecord
+from ..storage.models import HubKey, User, UsageRecord
 
 router = APIRouter()
 _templates_dir = os.path.join(os.path.dirname(os.path.dirname(__file__)), "templates")
@@ -25,7 +26,7 @@ templates = Jinja2Templates(directory=_templates_dir)
 
 
 @router.get("/", response_class=HTMLResponse)
-def home(request: Request) -> HTMLResponse:
+def home(request: Request, current_user: User = Depends(require_user)) -> HTMLResponse:
     with get_session() as session:
         keys = session.exec(
             select(HubKey).order_by(HubKey.created_at.desc()).limit(10)
@@ -53,19 +54,24 @@ def home(request: Request) -> HTMLResponse:
             "recent_usage": recent_usage,
             "spend_24h": float(spend_24h or 0.0),
             "active_key_count": int(active_key_count or 0),
+            "current_user": current_user,
         },
     )
 
 
 @router.get("/keys", response_class=HTMLResponse)
-def keys_page(request: Request) -> HTMLResponse:
+def keys_page(request: Request, current_user: User = Depends(require_user)) -> HTMLResponse:
     with get_session() as session:
         keys = session.exec(select(HubKey).order_by(HubKey.created_at.desc())).all()
-    return templates.TemplateResponse(request, "keys.html", {"keys": keys})
+    return templates.TemplateResponse(
+        request,
+        "keys.html",
+        {"keys": keys, "current_user": current_user},
+    )
 
 
 @router.get("/models", response_class=HTMLResponse)
-def models_page(request: Request) -> HTMLResponse:
+def models_page(request: Request, current_user: User = Depends(require_user)) -> HTMLResponse:
     discovery_error: str | None = None
     names: list[str] = []
     try:
@@ -92,5 +98,6 @@ def models_page(request: Request) -> HTMLResponse:
             "grouped_models": grouped,
             "total_count": len(names),
             "discovery_error": discovery_error,
+            "current_user": current_user,
         },
     )
