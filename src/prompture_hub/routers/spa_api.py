@@ -353,12 +353,16 @@ def models() -> dict[str, Any]:
         get_provider_brand = lambda _name: None  # noqa: E731
         icon_url = lambda _brand: None  # noqa: E731
 
+    disabled = get_settings().disabled_provider_set
+
     by_provider: dict[str, list[str]] = {}
     for n in names:
         if "/" in n:
             provider, model = n.split("/", 1)
         else:
             provider, model = "unknown", n
+        if provider.lower() in disabled:
+            continue
         by_provider.setdefault(provider, []).append(model)
     for ms in by_provider.values():
         ms.sort()

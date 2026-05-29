@@ -50,6 +50,23 @@ class HubSettings(BaseSettings):
     github_client_id: str = Field(default="")
     github_client_secret: str = Field(default="")
 
+    disabled_providers: str = Field(
+        default="cachibot",
+        description=(
+            "Comma-separated provider names to hide from /api/models. "
+            "Use to suppress internal routers / unfinished drivers without "
+            "touching Prompture itself. Case-insensitive."
+        ),
+    )
+
+    @property
+    def disabled_provider_set(self) -> set[str]:
+        return {
+            p.strip().lower()
+            for p in self.disabled_providers.split(",")
+            if p.strip()
+        }
+
     @property
     def allowed_email_set(self) -> set[str]:
         return {e.strip().lower() for e in self.allowed_emails.split(",") if e.strip()}
