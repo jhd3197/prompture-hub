@@ -61,6 +61,23 @@ export const api = {
     truncated: boolean;
     max_depth: number;
   }>("/api/workspace/dirs"),
+  systemInfo: () => request<{
+    platform: string;
+    platform_release: string;
+    is_wsl: boolean;
+    python_version: string;
+    hub_host: string;
+    hub_port: number;
+    hub_base_url: string;
+    bind_is_local: boolean;
+    interfaces: Array<{ name: string; address: string }>;
+    tunneling: {
+      cloudflared_installed: boolean;
+      ngrok_installed: boolean;
+      tailscale_installed: boolean;
+    };
+    lan_share_supported: boolean;
+  }>("/api/system/info"),
   runAgent: (body: {
     agent: string;
     task: string;

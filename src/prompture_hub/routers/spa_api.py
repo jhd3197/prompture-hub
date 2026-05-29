@@ -347,6 +347,81 @@ def delete_conversation(
 # ---------------------------------------------------------------------------
 
 
+@router.get("/system/info")
+def system_info(_user: User = Depends(require_user)) -> dict[str, Any]:
+    """Host environment summary for the Settings → Network panel.
+
+    Returns what the dashboard needs to tell the operator *where* the hub
+    is reachable from and *whether* the current host can expose it on a
+    LAN. Windows-native bound to 127.0.0.1 can't trivially be shared
+    over the network — operators are pointed at WSL2 / Linux. WSL2 still
+    works fine for localhost but external reach needs Windows port
+    forwarding, which we just flag rather than try to automate.
+    """
+    import platform
+    import shutil
+    import socket
+    import sys
+
+    settings = get_settings()
+    plat = platform.system()
+    is_wsl = False
+    if plat == "Linux":
+        try:
+            with open("/proc/version", encoding="utf-8") as f:
+                version_text = f.read().lower()
+            is_wsl = "microsoft" in version_text or "wsl" in version_text
+        except OSError:
+            pass
+
+    interfaces: list[dict[str, str]] = []
+    seen: set[str] = set()
+    try:
+        import psutil  # type: ignore[import-untyped]
+        for name, addrs in psutil.net_if_addrs().items():
+            for addr in addrs:
+                if addr.family != socket.AF_INET:
+                    continue
+                ip = addr.address
+                if ip.startswith("127.") or ip in seen:
+                    continue
+                seen.add(ip)
+                interfaces.append({"name": name, "address": ip})
+    except ImportError:
+        # psutil isn't a hard dep; fall back to gethostbyname_ex which
+        # works for the primary interface on most hosts.
+        try:
+            for ip in socket.gethostbyname_ex(socket.gethostname())[2]:
+                if ip.startswith("127.") or ip in seen:
+                    continue
+                seen.add(ip)
+                interfaces.append({"name": "primary", "address": ip})
+        except OSError:
+            pass
+
+    # Bind reachability: a host bound to 127.0.0.1 is localhost-only no
+    # matter what interfaces exist; advertise reachability accordingly.
+    bind_is_local = settings.host in {"127.0.0.1", "localhost", "::1"}
+
+    return {
+        "platform": plat,             # Windows | Linux | Darwin
+        "platform_release": platform.release(),
+        "is_wsl": is_wsl,
+        "python_version": sys.version.split()[0],
+        "hub_host": settings.host,
+        "hub_port": settings.port,
+        "hub_base_url": settings.base_url,
+        "bind_is_local": bind_is_local,
+        "interfaces": interfaces,
+        "tunneling": {
+            "cloudflared_installed": shutil.which("cloudflared") is not None,
+            "ngrok_installed": shutil.which("ngrok") is not None,
+            "tailscale_installed": shutil.which("tailscale") is not None,
+        },
+        "lan_share_supported": not bind_is_local and plat in {"Linux", "Darwin"},
+    }
+
+
 @router.get("/workspace/dirs")
 def list_workspace_dirs(
     max_depth: int = 3,

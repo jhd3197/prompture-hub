@@ -1,6 +1,6 @@
 import { NavLink } from "react-router-dom";
 import {
-  IconBook, IconExternal, IconGrid, IconHome, IconKey, IconMessages,
+  IconCog, IconExternal, IconGrid, IconHome, IconKey, IconMessages,
   IconMoon, IconSun,
 } from "../icons";
 import { useTheme } from "../theme";
@@ -12,6 +12,7 @@ const nav: Array<[string, string, (p: { style?: React.CSSProperties }) => JSX.El
   ["/keys", "Keys", IconKey],
   ["/conversations", "Sessions", IconMessages],
   ["/models", "Models", IconGrid],
+  ["/settings", "Settings", IconCog],
 ];
 
 export function Header({ user }: { user: CurrentUser }) {
@@ -32,10 +33,6 @@ export function Header({ user }: { user: CurrentUser }) {
               <Ico style={{ width: 16, height: 16 }} />{label}
             </NavLink>
           ))}
-          <a className="ext" href="/docs" target="_blank" rel="noopener noreferrer" title="Auto-generated OpenAPI docs">
-            <IconBook style={{ width: 16, height: 16 }} />Docs
-            <IconExternal style={{ width: 12, height: 12, opacity: 0.6 }} />
-          </a>
         </nav>
         <div className="header-right">
           <button

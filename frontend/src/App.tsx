@@ -11,6 +11,10 @@ import { Dashboard } from "./pages/Dashboard";
 import { KeysPage } from "./pages/KeysPage";
 import { LoginPage } from "./pages/LoginPage";
 import { ModelsPage } from "./pages/ModelsPage";
+import { SettingsPage } from "./pages/SettingsPage";
+import { AppearanceSettings } from "./pages/settings/AppearanceSettings";
+import { ApiSettings } from "./pages/settings/ApiSettings";
+import { NetworkSettings } from "./pages/settings/NetworkSettings";
 import type { CurrentUser } from "./types";
 
 type AuthState =
@@ -47,6 +51,12 @@ function AuthedShell({ user }: { user: CurrentUser }) {
             <Route path="/keys/new" element={<CreateKeyPage />} />
             <Route path="/conversations" element={<ConversationsPage />} />
             <Route path="/models" element={<ModelsPage />} />
+            <Route path="/settings" element={<SettingsPage />}>
+              <Route index element={<Navigate to="appearance" replace />} />
+              <Route path="appearance" element={<AppearanceSettings />} />
+              <Route path="network" element={<NetworkSettings />} />
+              <Route path="api" element={<ApiSettings />} />
+            </Route>
             <Route path="*" element={<Navigate to="/" replace />} />
           </Routes>
         </main>
