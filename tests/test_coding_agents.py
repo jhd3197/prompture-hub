@@ -6,6 +6,7 @@ fork subprocesses.
 
 from __future__ import annotations
 
+import json
 import os
 import tempfile
 import types
@@ -237,3 +238,91 @@ def test_runner_error_returns_502(monkeypatch):
     )
     assert r.status_code == 502
     assert "sideways" in r.json()["detail"]
+
+
+# ---------- streaming ----------
+
+
+def _patch_astream(monkeypatch, events):
+    """Patch astream_coding_agent to yield the given event sequence."""
+    async def fake_astream(*args, **kwargs):
+        for ev in events:
+            yield types.SimpleNamespace(**ev)
+
+    import prompture.infra.coding_agents as ca
+    monkeypatch.setattr(ca, "astream_coding_agent", fake_astream, raising=False)
+
+
+def _parse_sse(body: str) -> list:
+    out: list = []
+    for frame in body.split("\n\n"):
+        line = frame.strip()
+        if not line.startswith("data: "):
+            continue
+        payload = line[len("data: "):]
+        if payload == "[DONE]":
+            out.append("[DONE]")
+        else:
+            out.append(json.loads(payload))
+    return out
+
+
+def test_stream_emits_sse_and_done(monkeypatch):
+    pt = _new_key()
+    _patch_astream(monkeypatch, [
+        {"type": "thinking", "text": "thinking…"},
+        {"type": "message",  "text": "Hello world"},
+        {"type": "result", "cost_usd": 0.0042,
+         "input_tokens": 11, "output_tokens": 22},
+    ])
+
+    r = _client().post(
+        "/v1/coding-agents/run",
+        headers={"Authorization": f"Bearer {pt}"},
+        json={"agent": "claude", "task": "hi", "stream": True},
+    )
+    assert r.status_code == 200, r.text
+    assert r.headers["content-type"].startswith("text/event-stream")
+
+    events = _parse_sse(r.text)
+    assert events[-1] == "[DONE]"
+    types_seen = [e["type"] for e in events if isinstance(e, dict)]
+    assert types_seen == ["thinking", "message", "result"]
+
+
+def test_stream_records_usage(monkeypatch):
+    pt = _new_key()
+    _patch_astream(monkeypatch, [
+        {"type": "message", "text": "hi"},
+        {"type": "result", "cost_usd": 0.01, "input_tokens": 5, "output_tokens": 10},
+    ])
+
+    r = _client().post(
+        "/v1/coding-agents/run",
+        headers={"Authorization": f"Bearer {pt}"},
+        json={"agent": "claude", "task": "hi", "stream": True},
+    )
+    assert r.status_code == 200
+    _ = r.text  # drain so the generator runs metering
+
+    rows = _client().get(
+        "/admin/usage",
+        headers={"Authorization": "Bearer test-token"},
+    ).json()
+    streamed = [r for r in rows if r["endpoint"] == "/v1/coding-agents/run"]
+    assert len(streamed) == 1
+    assert streamed[0]["cost_usd"] == pytest.approx(0.01, rel=1e-6)
+    assert streamed[0]["total_tokens"] == 15
+
+
+def test_stream_refused_when_agent_lacks_structured_events(monkeypatch):
+    pt = _new_key()
+    # Aider's spec has parse_events=None, so streaming is refused upstream
+    # before astream_coding_agent is even called. No need to patch.
+    r = _client().post(
+        "/v1/coding-agents/run",
+        headers={"Authorization": f"Bearer {pt}"},
+        json={"agent": "aider", "task": "x", "stream": True},
+    )
+    assert r.status_code == 400
+    assert "structured" in r.json()["detail"].lower()

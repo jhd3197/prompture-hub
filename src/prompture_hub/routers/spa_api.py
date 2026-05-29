@@ -338,10 +338,10 @@ def delete_conversation(
 
 
 @router.post("/agents/run")
-def run_agent_console(
+async def run_agent_console(
     body: RunAgentRequest,
     user: User = Depends(require_user),
-) -> dict[str, Any]:
+):
     """Dashboard / operator-console variant of POST /v1/coding-agents/run.
 
     Auth is the session cookie (operator already passed allowlist + OAuth);
@@ -349,7 +349,29 @@ def run_agent_console(
     the operator's own work — they shouldn't count against any hub key's
     budget or appear on the dashboard's metering feed.
     """
+    from fastapi.responses import StreamingResponse
+
     from .coding_agents import execute_run as _execute_run
+    from .coding_agents import precheck_stream as _precheck
+    from .coding_agents import stream_run as _stream_run
+
+    if body.stream:
+        cwd = _precheck(body)
+
+        async def gen():
+            async for line, _totals in _stream_run(body, cwd):
+                if line:
+                    yield line
+
+        return StreamingResponse(
+            gen(),
+            media_type="text/event-stream",
+            headers={
+                "Cache-Control": "no-cache, no-transform",
+                "X-Accel-Buffering": "no",
+                "Connection": "keep-alive",
+            },
+        )
 
     response, *_ = _execute_run(body)
     return response

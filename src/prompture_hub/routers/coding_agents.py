@@ -20,12 +20,15 @@ into it.
 
 from __future__ import annotations
 
+import json
 import os
 import time
+from collections.abc import AsyncIterator
 from pathlib import Path
 from typing import Any
 
 from fastapi import APIRouter, Depends, HTTPException, status
+from fastapi.responses import StreamingResponse
 from pydantic import BaseModel, Field
 
 from ..quotas import enforce_quotas
@@ -63,6 +66,14 @@ class RunAgentRequest(BaseModel):
     timeout: int | None = Field(
         default=None, description="Override HUB_AGENT_DEFAULT_TIMEOUT for this run.",
     )
+    stream: bool = Field(
+        default=False,
+        description=(
+            "When true, returns a text/event-stream of structured agent events "
+            "as they arrive. Only supported for agents whose CLI exposes a "
+            "structured-event parser (Claude Code today)."
+        ),
+    )
 
 
 def _resolve_workspace_cwd(requested: str | None) -> str:
@@ -99,6 +110,134 @@ def _serialize_events(raw: Any) -> list[dict[str, Any]]:
         else:
             out.append({"raw": str(ev)})
     return out
+
+
+def _event_to_dict(ev: Any) -> dict[str, Any]:
+    if hasattr(ev, "__dict__"):
+        d = {k: v for k, v in vars(ev).items() if not k.startswith("_")}
+    else:
+        d = {"raw": str(ev)}
+    # `raw` can carry the full JSON payload — keep it but truncate strings
+    # so a runaway event doesn't blow up the SSE stream.
+    raw = d.get("raw")
+    if isinstance(raw, str) and len(raw) > 4000:
+        d["raw"] = raw[:4000] + "…"
+    return d
+
+
+def _sse(payload: Any) -> str:
+    if isinstance(payload, str):
+        return f"data: {payload}\n\n"
+    return f"data: {json.dumps(payload, default=str, separators=(',', ':'))}\n\n"
+
+
+def _validate_stream_support(agent_id: str) -> None:
+    """Refuse with 400 if the agent CLI lacks structured-event parsing."""
+    try:
+        from prompture.infra.coding_agent_specs import CODING_AGENT_SPECS
+    except ImportError:  # pragma: no cover
+        return
+    spec = CODING_AGENT_SPECS.get(agent_id.lower())
+    if spec is None:
+        return
+    if not spec.supports_structured_output:
+        raise HTTPException(
+            status_code=status.HTTP_400_BAD_REQUEST,
+            detail=(
+                f"Agent '{agent_id}' doesn't expose structured events; "
+                "retry with stream=false."
+            ),
+        )
+
+
+def precheck_stream(body: RunAgentRequest) -> str:
+    """Synchronous validation that must run BEFORE the StreamingResponse
+    starts. Raises HTTPException for callers to surface as a normal HTTP
+    error response. Returns the resolved cwd."""
+    settings = get_settings()
+    if body.approval_mode == "yolo" and not settings.allow_agent_yolo:
+        raise HTTPException(
+            status_code=status.HTTP_403_FORBIDDEN,
+            detail=(
+                "approval_mode='yolo' is disabled on this hub. "
+                "Set HUB_ALLOW_AGENT_YOLO=true to enable, then restart."
+            ),
+        )
+    _validate_stream_support(body.agent)
+    return _resolve_workspace_cwd(body.cwd)
+
+
+async def stream_run(body: RunAgentRequest, cwd: str) -> AsyncIterator[tuple[str, dict[str, Any] | None]]:
+    """Async generator yielding ``(sse_line, totals_or_None)``.
+
+    The last yielded tuple has a ``totals`` dict (status / cost / tokens /
+    duration) so the caller can write a UsageRecord after the stream
+    finishes. All earlier tuples carry SSE strings and None.
+
+    Synchronous validation (yolo gate, stream-support check, cwd resolve)
+    must happen via :func:`precheck_stream` before this generator is
+    consumed — once the StreamingResponse has started, raising HTTPException
+    crashes the connection instead of returning a proper error response.
+    """
+    settings = get_settings()
+    timeout = body.timeout or settings.agent_default_timeout
+
+    try:
+        from prompture.infra.coding_agents import astream_coding_agent
+    except ImportError as exc:  # pragma: no cover
+        raise HTTPException(
+            status_code=status.HTTP_501_NOT_IMPLEMENTED,
+            detail="This Prompture version doesn't expose astream_coding_agent.",
+        ) from exc
+
+    started = time.perf_counter()
+    cost = 0.0
+    prompt_tok = 0
+    completion_tok = 0
+    final_returncode = 0
+    error_msg: str | None = None
+
+    try:
+        async for ev in astream_coding_agent(
+            body.agent,
+            body.task,
+            cwd=cwd,
+            approval_mode=body.approval_mode,  # type: ignore[arg-type]
+            model=body.model,
+            extra_args=body.extra_args or None,
+            session_id=body.session_id,
+        ):
+            d = _event_to_dict(ev)
+            yield _sse(d), None
+
+            # Accumulate metering as result events stream past.
+            etype = d.get("type")
+            if etype == "result":
+                if d.get("cost_usd") is not None:
+                    cost = float(d["cost_usd"])
+                if d.get("input_tokens") is not None:
+                    prompt_tok = int(d["input_tokens"])
+                if d.get("output_tokens") is not None:
+                    completion_tok = int(d["output_tokens"])
+            elif etype == "error":
+                final_returncode = 1
+                error_msg = str(d.get("error") or d.get("text") or "agent error")
+    except Exception as exc:  # noqa: BLE001
+        final_returncode = 1
+        error_msg = str(exc)
+        yield _sse({"type": "error", "error": error_msg}), None
+
+    yield _sse("[DONE]"), None
+
+    elapsed_ms = int((time.perf_counter() - started) * 1000)
+    yield "", {
+        "status": "ok" if final_returncode == 0 else "error",
+        "prompt_tokens": prompt_tok,
+        "completion_tokens": completion_tok,
+        "cost_usd": cost,
+        "elapsed_ms": elapsed_ms,
+        "error": error_msg,
+    }
 
 
 def execute_run(body: RunAgentRequest) -> tuple[dict[str, Any], int, int, float]:
@@ -174,8 +313,41 @@ def execute_run(body: RunAgentRequest) -> tuple[dict[str, Any], int, int, float]
 async def run_agent(
     body: RunAgentRequest,
     key: HubKey = Depends(enforce_quotas),
-) -> dict[str, Any]:
+):
     endpoint = "/v1/coding-agents/run"
+
+    if body.stream:
+        cwd = precheck_stream(body)
+
+        async def gen():
+            totals: dict[str, Any] | None = None
+            async for line, t in stream_run(body, cwd):
+                if t is not None:
+                    totals = t
+                    continue
+                if line:
+                    yield line
+            if totals is not None:
+                _record(
+                    key.id, body.agent, endpoint,
+                    int(totals["prompt_tokens"]),
+                    int(totals["completion_tokens"]),
+                    float(totals["cost_usd"]),
+                    int(totals["elapsed_ms"]),
+                    str(totals["status"]),
+                    totals.get("error"),
+                )
+
+        return StreamingResponse(
+            gen(),
+            media_type="text/event-stream",
+            headers={
+                "Cache-Control": "no-cache, no-transform",
+                "X-Accel-Buffering": "no",
+                "Connection": "keep-alive",
+            },
+        )
+
     started = time.perf_counter()
     try:
         response, prompt_tok, completion_tok, cost = execute_run(body)

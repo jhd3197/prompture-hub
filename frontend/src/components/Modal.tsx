@@ -1,4 +1,5 @@
 import { useEffect, type ReactNode } from "react";
+import { createPortal } from "react-dom";
 import { IconX } from "../icons";
 
 interface Props {
@@ -17,7 +18,10 @@ export function Modal({ title, desc, children, footer, onClose, wide }: Props) {
     return () => window.removeEventListener("keydown", onKey);
   }, [onClose]);
 
-  return (
+  // Portal to <body> so any ancestor with `transform`, `filter`, etc.
+  // can't trap our position:fixed overlay (the agent-card's fade-in
+  // animation does exactly that).
+  return createPortal(
     <div className="overlay" onMouseDown={onClose}>
       <div
         className="modal"
@@ -39,6 +43,7 @@ export function Modal({ title, desc, children, footer, onClose, wide }: Props) {
         <div className="modal-body">{children}</div>
         {footer && <div className="modal-foot">{footer}</div>}
       </div>
-    </div>
+    </div>,
+    document.body,
   );
 }

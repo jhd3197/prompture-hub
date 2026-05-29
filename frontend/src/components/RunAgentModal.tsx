@@ -1,4 +1,4 @@
-import { useState } from "react";
+import { useRef, useState } from "react";
 import { ApiError, api } from "../api";
 import {
   IconAlert, IconBolt, IconCheck, IconRefresh, IconTerminal, IconX,
@@ -18,11 +18,99 @@ interface RunResult {
   cwd: string;
 }
 
+type StreamEvent = Record<string, unknown> & { type?: string };
+
 const APPROVAL_OPTIONS: Array<[ApprovalMode, string, string]> = [
   ["default", "Default", "Prompt before each tool call (safest)."],
   ["auto", "Auto", "Auto-approve sandbox-safe actions; prompt only on risky ones."],
   ["yolo", "Yolo", "Approve everything. Requires HUB_ALLOW_AGENT_YOLO=true."],
 ];
+
+const EVENT_TINT: Record<string, { color: string; background: string }> = {
+  thinking:    { color: "var(--text-3)", background: "var(--surface-2)" },
+  message:     { color: "var(--accent-strong)", background: "var(--accent-softer)" },
+  tool_call:   { color: "var(--info)", background: "color-mix(in oklch, var(--info) 8%, var(--surface))" },
+  tool_result: { color: "var(--info)", background: "color-mix(in oklch, var(--info) 8%, var(--surface))" },
+  result:      { color: "var(--accent-strong)", background: "var(--accent-soft)" },
+  error:       { color: "var(--danger)", background: "var(--danger-soft)" },
+  question:    { color: "var(--warn)", background: "var(--warn-soft)" },
+};
+
+function StreamEventRow({ event }: { event: StreamEvent }) {
+  const type = String(event.type || "event");
+  const tint = EVENT_TINT[type] || { color: "var(--text-2)", background: "var(--surface)" };
+
+  const text = (event.text as string) || "";
+  const toolName = event.tool_name as string | undefined;
+  const cost = event.cost_usd as number | undefined;
+  const inTok = event.input_tokens as number | undefined;
+  const outTok = event.output_tokens as number | undefined;
+
+  return (
+    <div
+      style={{
+        padding: "8px 10px",
+        borderRadius: "var(--r-sm)",
+        background: tint.background,
+        border: "1px solid var(--border)",
+        fontSize: 12.5,
+      }}
+    >
+      <div className="row" style={{ gap: 8 }}>
+        <span
+          className="mono"
+          style={{
+            color: tint.color,
+            fontWeight: 700,
+            fontSize: 10.5,
+            textTransform: "uppercase",
+            letterSpacing: "0.04em",
+          }}
+        >
+          {type}
+        </span>
+        {toolName && (
+          <span className="mono faint" style={{ fontSize: 11.5 }}>{toolName}</span>
+        )}
+        {type === "result" && (
+          <span className="faint mono" style={{ marginLeft: "auto", fontSize: 11.5 }}>
+            {inTok ?? 0} in · {outTok ?? 0} out
+            {cost !== undefined && cost > 0 && <> · ${cost.toFixed(4)}</>}
+          </span>
+        )}
+      </div>
+      {text && (
+        <div
+          style={{
+            marginTop: 4,
+            whiteSpace: "pre-wrap",
+            wordBreak: "break-word",
+            color: "var(--text)",
+            lineHeight: 1.45,
+          }}
+        >
+          {text}
+        </div>
+      )}
+      {event.tool_input != null && (
+        <pre
+          className="code"
+          style={{ marginTop: 6, padding: "6px 8px", fontSize: 11, maxHeight: 140 }}
+        >
+          {JSON.stringify(event.tool_input, null, 2)}
+        </pre>
+      )}
+      {event.tool_output != null && (
+        <pre
+          className="code"
+          style={{ marginTop: 6, padding: "6px 8px", fontSize: 11, maxHeight: 140 }}
+        >
+          {String(event.tool_output).slice(0, 1200)}
+        </pre>
+      )}
+    </div>
+  );
+}
 
 export function RunAgentModal({
   agent, onClose,
@@ -36,15 +124,18 @@ export function RunAgentModal({
   );
   const [cwd, setCwd] = useState("");
 
+  const [streamMode, setStreamMode] = useState(
+    agent.capabilities.structured_output,
+  );
+
   const [running, setRunning] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [result, setResult] = useState<RunResult | null>(null);
+  const [events, setEvents] = useState<StreamEvent[]>([]);
+  const [streamDone, setStreamDone] = useState(false);
+  const abortRef = useRef<AbortController | null>(null);
 
-  const submit = async () => {
-    if (!task.trim() || running) return;
-    setRunning(true);
-    setError(null);
-    setResult(null);
+  const submitSync = async () => {
     try {
       const r = await api.runAgent({
         agent: agent.id,
@@ -63,26 +154,123 @@ export function RunAgentModal({
             : e.message)
         : String(e);
       setError(msg);
+    }
+  };
+
+  const submitStream = async () => {
+    const controller = new AbortController();
+    abortRef.current = controller;
+    setEvents([]);
+    setStreamDone(false);
+
+    let res: Response;
+    try {
+      res = await fetch("/api/agents/run", {
+        method: "POST",
+        credentials: "same-origin",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          agent: agent.id,
+          task: task.trim(),
+          approval_mode: approvalMode,
+          model: model.trim() || null,
+          extra_args: extraArgs.split(/\s+/).filter(Boolean),
+          output_format: "json",
+          cwd: cwd.trim() || null,
+          stream: true,
+        }),
+        signal: controller.signal,
+      });
+    } catch (e) {
+      setError(String(e));
+      return;
+    }
+
+    if (!res.ok || !res.body) {
+      let detail = `${res.status} ${res.statusText}`;
+      try {
+        const body = await res.json();
+        if (body?.detail) detail = String(body.detail);
+      } catch { /* ignore */ }
+      setError(detail);
+      return;
+    }
+
+    const reader = res.body.getReader();
+    const decoder = new TextDecoder();
+    let buffer = "";
+    while (true) {
+      const { value, done } = await reader.read();
+      if (done) break;
+      buffer += decoder.decode(value, { stream: true });
+      // SSE frames are separated by a blank line.
+      const frames = buffer.split("\n\n");
+      buffer = frames.pop() || "";
+      for (const frame of frames) {
+        const line = frame.trim();
+        if (!line.startsWith("data: ")) continue;
+        const payload = line.slice("data: ".length);
+        if (payload === "[DONE]") {
+          setStreamDone(true);
+          continue;
+        }
+        try {
+          const ev = JSON.parse(payload) as StreamEvent;
+          setEvents(prev => [...prev, ev]);
+        } catch {
+          // ignore malformed frame
+        }
+      }
+    }
+    setStreamDone(true);
+  };
+
+  const submit = async () => {
+    if (!task.trim() || running) return;
+    setRunning(true);
+    setError(null);
+    setResult(null);
+    try {
+      if (streamMode && agent.capabilities.structured_output) {
+        await submitStream();
+      } else {
+        await submitSync();
+      }
     } finally {
       setRunning(false);
     }
   };
 
+  const reset = () => {
+    abortRef.current?.abort();
+    setResult(null);
+    setEvents([]);
+    setStreamDone(false);
+    setError(null);
+  };
+
+  const hasStreamView = streamMode && (events.length > 0 || running);
+  const showingResultView = !!result || hasStreamView;
+
   return (
     <Modal
-      title={result ? `Result · ${agent.name}` : `Run task with ${agent.name}`}
+      title={showingResultView ? `Result · ${agent.name}` : `Run task with ${agent.name}`}
       wide
       onClose={onClose}
       desc={
         result ? (
           <>Finished in <span className="mono tnum">{result.duration_seconds.toFixed(2)}s</span> · exit <span className="mono">{result.returncode}</span></>
+        ) : hasStreamView ? (
+          streamDone
+            ? <>Stream finished · {events.length} event{events.length !== 1 ? "s" : ""} received</>
+            : <>Streaming live events from <code className="mono">{agent.binary}</code>…</>
         ) : (
           <>The hub will execute <code className="mono">{agent.binary}</code> inside the configured workspace and return the captured output.</>
         )
       }
-      footer={result ? (
+      footer={showingResultView ? (
         <>
-          <button className="btn btn-ghost" onClick={() => setResult(null)}>
+          <button className="btn btn-ghost" onClick={reset} disabled={running}>
             <IconRefresh style={{ width: 13, height: 13 }} />Run another
           </button>
           <button className="btn btn-primary" onClick={onClose}>Done</button>
@@ -96,7 +284,7 @@ export function RunAgentModal({
             disabled={!task.trim() || running}
           >
             <IconBolt style={{ width: 13, height: 13 }} />
-            {running ? "Running…" : "Run task"}
+            {running ? (streamMode ? "Streaming…" : "Running…") : "Run task"}
           </button>
         </>
       )}
@@ -112,7 +300,7 @@ export function RunAgentModal({
         </div>
       )}
 
-      {!result && (
+      {!showingResultView && (
         <>
           <div className="field">
             <label htmlFor="agent-task">Task</label>
@@ -216,6 +404,85 @@ export function RunAgentModal({
               />
               <span className="hint">Space-separated. Forwarded verbatim to the binary.</span>
             </div>
+          </div>
+
+          <label
+            className="row"
+            style={{
+              gap: 10,
+              padding: "10px 12px",
+              border: "1px solid var(--border)",
+              borderRadius: "var(--r-md)",
+              background: "var(--surface-2)",
+              cursor: agent.capabilities.structured_output ? "pointer" : "not-allowed",
+              opacity: agent.capabilities.structured_output ? 1 : 0.55,
+            }}
+          >
+            <input
+              type="checkbox"
+              checked={streamMode && agent.capabilities.structured_output}
+              disabled={!agent.capabilities.structured_output}
+              onChange={e => setStreamMode(e.target.checked)}
+              style={{ accentColor: "var(--accent)" }}
+            />
+            <div style={{ flex: 1 }}>
+              <div style={{ fontWeight: 600, fontSize: 13 }}>
+                Stream events live
+              </div>
+              <div className="faint" style={{ fontSize: 12 }}>
+                {agent.capabilities.structured_output
+                  ? "See tool calls, messages, and the final result as they arrive."
+                  : "This agent doesn't expose structured events. Will return the full output at the end."}
+              </div>
+            </div>
+          </label>
+        </>
+      )}
+
+      {hasStreamView && (
+        <>
+          <div
+            className="row"
+            style={{
+              gap: 8, padding: "8px 12px",
+              borderRadius: "var(--r-md)",
+              background: streamDone ? "var(--accent-soft)" : "var(--surface-2)",
+              border: "1px solid var(--border)",
+              fontSize: 12.5,
+            }}
+          >
+            {streamDone ? (
+              <IconCheck style={{ color: "var(--accent-strong)", width: 14, height: 14 }} />
+            ) : (
+              <span className="kdot live"></span>
+            )}
+            <span style={{ fontWeight: 600 }}>
+              {streamDone ? "Stream finished" : "Live"}
+            </span>
+            <span className="faint" style={{ marginLeft: "auto" }}>
+              {events.length} event{events.length !== 1 ? "s" : ""}
+            </span>
+          </div>
+
+          <div
+            style={{
+              maxHeight: 380,
+              overflow: "auto",
+              border: "1px solid var(--border)",
+              borderRadius: "var(--r-md)",
+              padding: 4,
+              display: "flex",
+              flexDirection: "column",
+              gap: 4,
+            }}
+          >
+            {events.length === 0 ? (
+              <p className="faint" style={{ padding: 14, margin: 0, fontSize: 12.5 }}>
+                Waiting for first event…
+              </p>
+            ) : (
+              events.map((ev, i) => <StreamEventRow key={i} event={ev} />)
+            )}
           </div>
         </>
       )}
