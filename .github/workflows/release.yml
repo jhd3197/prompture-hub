@@ -1,0 +1,100 @@
+name: Release to PyPI
+
+# Publishes prompture-hub to PyPI when a version tag (v*) is pushed.
+#
+# The Vite/React SPA is PREBUILT here (npm ci && npm run build) so the published
+# wheel/sdist bundles static assets and end users never need Node/npm — just
+# `pip install prompture-hub`. Publishing uses PyPI Trusted Publishing (OIDC):
+# no API token is stored in repo secrets.
+#
+# One-time setup on PyPI: create a Trusted Publisher for project "prompture-hub"
+# pointing at owner/repo, workflow file "release.yml", environment "pypi".
+
+on:
+  push:
+    tags:
+      - "v*"
+
+permissions:
+  contents: read
+
+jobs:
+  build:
+    name: Build SPA + wheel/sdist
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+
+      - name: Setup Node 20
+        uses: actions/setup-node@v4
+        with:
+          node-version: "20"
+          cache: npm
+          cache-dependency-path: frontend/package-lock.json
+
+      - name: Build the SPA
+        working-directory: frontend
+        run: |
+          npm ci
+          npm run build
+
+      - name: Verify SPA landed in package tree
+        run: |
+          test -f src/prompture_hub/static/app/index.html \
+            || { echo "::error::SPA build missing src/prompture_hub/static/app/index.html"; exit 1; }
+
+      - name: Setup Python 3.12
+        uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+
+      - name: Build sdist + wheel
+        run: |
+          python -m pip install --upgrade pip build
+          python -m build
+
+      - name: Verify built artifacts contain the SPA
+        run: |
+          python -m pip install --upgrade twine
+          twine check dist/*
+          echo "--- wheel contents ---"
+          python - <<'PY'
+          import glob, sys, zipfile
+          wheels = glob.glob("dist/*.whl")
+          assert wheels, "no wheel built"
+          names = zipfile.ZipFile(wheels[0]).namelist()
+          needle = "prompture_hub/static/app/index.html"
+          if needle not in names:
+              print("\n".join(names))
+              sys.exit(f"::error::{needle} not bundled in wheel")
+          print(f"OK: {needle} present in {wheels[0]}")
+          PY
+
+      - name: Upload dist artifact
+        uses: actions/upload-artifact@v4
+        with:
+          name: dist
+          path: dist/
+          if-no-files-found: error
+
+  publish:
+    name: Publish to PyPI (Trusted Publishing / OIDC)
+    needs: [build]
+    runs-on: ubuntu-latest
+    environment:
+      name: pypi
+      url: https://pypi.org/p/prompture-hub
+    permissions:
+      id-token: write  # required for OIDC trusted publishing
+    steps:
+      - name: Download dist artifact
+        uses: actions/download-artifact@v4
+        with:
+          name: dist
+          path: dist/
+
+      - name: Publish to PyPI
+        uses: pypa/gh-action-pypi-publish@release/v1

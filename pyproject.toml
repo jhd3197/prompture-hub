@@ -47,8 +47,28 @@ prompture-hub = "prompture_hub.main:cli"
 Homepage = "https://github.com/jhd3197/prompture-hub"
 Issues = "https://github.com/jhd3197/prompture-hub/issues"
 
+# Custom build hook: compiles the Vite/React SPA (frontend/) into
+# src/prompture_hub/static/app/ during sdist + wheel builds. See hatch_build.py.
+# Runs for every build target; skips gracefully if Node is absent but a
+# prebuilt bundle already exists (devs doing `pip install -e .`, prebuilt CI).
+[tool.hatch.build.hooks.custom]
+path = "hatch_build.py"
+
 [tool.hatch.build.targets.wheel]
 packages = ["src/prompture_hub"]
+# The built Vite/React SPA lands in src/prompture_hub/static/app/, which is
+# .gitignored. Hatchling excludes VCS-ignored paths by default, so force the
+# built bundle in explicitly; the key is the on-disk source, the value is the
+# path inside the wheel. The build hook (above) produces it before packaging.
+# NOTE: only force-include app/ — static/.gitkeep is VCS-tracked and already
+# shipped via `packages`, so force-including the whole static/ dir would
+# duplicate it (zipfile "Duplicate name" warning).
+force-include = { "src/prompture_hub/static/app" = "prompture_hub/static/app" }
+
+[tool.hatch.build.targets.sdist]
+# Ship the built SPA in the sdist too so `pip install <sdist>` works without
+# Node. force-include uses on-disk-path = path-in-archive.
+force-include = { "src/prompture_hub/static/app" = "prompture_hub/static/app" }
 
 [tool.ruff]
 line-length = 100

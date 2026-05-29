@@ -82,7 +82,13 @@ def create_app() -> FastAPI:
         return {"status": "ok"}
 
     static_dir = os.path.join(os.path.dirname(__file__), "static")
-    app.mount("/static", StaticFiles(directory=static_dir), name="static")
+    # StaticFiles raises RuntimeError at construction if the directory is
+    # absent. The built SPA bundle (static/app/) is produced by `npm run build`
+    # and is .gitignored, so a source checkout or a wheel published without the
+    # frontend would otherwise crash on startup. Mount only when present; the
+    # /app SPA handler below already degrades to a 503 when the bundle is missing.
+    if os.path.isdir(static_dir):
+        app.mount("/static", StaticFiles(directory=static_dir), name="static")
 
     # --- SPA: served from /app/ ---
     spa_dir = os.path.join(static_dir, "app")

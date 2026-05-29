@@ -1,0 +1,3 @@
+# Keeps src/prompture_hub/static/ present in VCS and in the built wheel so the
+# StaticFiles mount in main.py (app.mount("/static", ...)) never crashes at
+# startup, even if the SPA bundle (static/app/) was not built. Do not delete.
