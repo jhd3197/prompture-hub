@@ -3,7 +3,7 @@ import {
   BrowserRouter, Navigate, Route, Routes, useLocation,
 } from "react-router-dom";
 import { ApiError, api } from "./api";
-import { Header } from "./components/Header";
+import { Sidebar } from "./components/Sidebar";
 import { ToastProvider } from "./components/Toast";
 import { ConversationsPage } from "./pages/ConversationsPage";
 import { CreateKeyPage } from "./pages/CreateKeyPage";
@@ -43,9 +43,10 @@ function AuthedShell({ user }: { user: CurrentUser }) {
     <>
       <a href="#main" className="skip-link">Skip to content</a>
       <div className="app">
-        <Header user={user} />
-        <main className="main" id="main">
-          <Routes>
+        <Sidebar user={user} />
+        <div className="content">
+          <main className="main" id="main">
+            <Routes>
             <Route path="/" element={<Dashboard user={user} />} />
             <Route path="/keys" element={<KeysPage />} />
             <Route path="/keys/new" element={<CreateKeyPage />} />
@@ -59,7 +60,8 @@ function AuthedShell({ user }: { user: CurrentUser }) {
             </Route>
             <Route path="*" element={<Navigate to="/" replace />} />
           </Routes>
-        </main>
+          </main>
+        </div>
       </div>
     </>
   );

@@ -132,7 +132,9 @@ input, select, textarea { font-family: inherit; }
 /* ============================================================
    App shell
    ============================================================ */
-.app { min-height: 100vh; display: flex; flex-direction: column; }
+.app { min-height: 100vh; display: flex; }
+
+.content { flex: 1; min-width: 0; display: flex; flex-direction: column; }
 
 .container {
   width: 100%;
@@ -144,17 +146,21 @@ input, select, textarea { font-family: inherit; }
 .main { flex: 1; padding: calc(34px * var(--density)) 0 80px; }
 
 /* ============================================================
-   Header
+   Sidebar
    ============================================================ */
-.header {
-  position: sticky; top: 0; z-index: 40;
-  background: color-mix(in oklch, var(--canvas) 86%, transparent);
-  backdrop-filter: saturate(1.4) blur(12px);
-  border-bottom: 1px solid var(--border);
+.sidebar {
+  position: sticky; top: 0;
+  width: 244px; flex: none;
+  height: 100vh;
+  display: flex; flex-direction: column;
+  background: var(--surface);
+  border-right: 1px solid var(--border);
 }
-.header-inner {
-  height: 58px;
-  display: flex; align-items: center; gap: 22px;
+.sidebar-brand {
+  height: 58px; flex: none;
+  display: flex; align-items: center;
+  padding: 0 20px;
+  border-bottom: 1px solid var(--border);
 }
 .brand { display: flex; align-items: center; gap: 10px; font-weight: 700; letter-spacing: -0.02em; font-size: 15px; }
 .brand-mark {
@@ -168,19 +174,62 @@ input, select, textarea { font-family: inherit; }
 .brand-name b { font-weight: 800; }
 .brand-name span { color: var(--text-3); font-weight: 500; }
 
-.nav { display: flex; align-items: center; gap: 2px; margin-left: 6px; }
-.nav a {
-  display: inline-flex; align-items: center; gap: 7px;
-  padding: 7px 12px; border-radius: var(--r-sm);
+.sidebar-nav {
+  flex: 1; min-height: 0; overflow-y: auto;
+  display: flex; flex-direction: column; gap: 2px;
+  padding: 14px 12px;
+}
+.sidebar-nav a {
+  display: flex; align-items: center; gap: 11px;
+  padding: 9px 12px; border-radius: var(--r-sm);
   color: var(--text-2); font-weight: 500; font-size: 13.5px;
   transition: background .12s, color .12s;
 }
-.nav a:hover { background: var(--surface-2); color: var(--text); }
-.nav a.active { color: var(--text); background: var(--accent-soft); }
-[data-theme="dark"] .nav a.active { color: var(--accent-strong); }
-.nav a.ext { color: var(--text-3); }
+.sidebar-nav a svg { flex: none; color: var(--text-3); transition: color .12s; }
+.sidebar-nav a:hover { background: var(--surface-2); color: var(--text); }
+.sidebar-nav a:hover svg { color: var(--text-2); }
+.sidebar-nav a.active { color: var(--text); background: var(--accent-soft); font-weight: 600; }
+.sidebar-nav a.active svg { color: var(--accent); }
+[data-theme="dark"] .sidebar-nav a.active { color: var(--accent-strong); }
+[data-theme="dark"] .sidebar-nav a.active svg { color: var(--accent-strong); }
 
-.header-right { margin-left: auto; display: flex; align-items: center; gap: 8px; }
+.sidebar-foot {
+  flex: none;
+  padding: 12px;
+  border-top: 1px solid var(--border);
+  display: flex; flex-direction: column; gap: 8px;
+}
+.sidebar-user {
+  display: flex; align-items: center; gap: 9px;
+  padding: 4px 6px;
+}
+.sidebar-user-meta { min-width: 0; flex: 1; line-height: 1.25; }
+.sidebar-user-name { font-weight: 600; font-size: 12.5px; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.sidebar-user-email { font-size: 11px; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.sidebar-user .icon-btn { flex: none; }
+.sidebar-logout { width: 100%; justify-content: center; border-color: var(--border); }
+
+/* Collapse to a top bar on narrow viewports */
+@media (max-width: 820px) {
+  .app { flex-direction: column; }
+  .sidebar {
+    width: auto; height: auto;
+    flex-direction: row; align-items: center;
+    border-right: none; border-bottom: 1px solid var(--border);
+  }
+  .sidebar-brand { border-bottom: none; padding-left: 20px; }
+  .sidebar-nav {
+    flex-direction: row; overflow-x: auto; padding: 0 8px;
+    flex: 1;
+  }
+  .sidebar-nav a { white-space: nowrap; }
+  .sidebar-foot {
+    flex-direction: row; align-items: center;
+    border-top: none; padding: 8px 12px;
+  }
+  .sidebar-user-meta { display: none; }
+  .sidebar-logout { width: auto; }
+}
 
 .avatar {
   width: 30px; height: 30px; border-radius: 50%;
