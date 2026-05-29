@@ -7,9 +7,22 @@ import { ModelMultiSelect } from "../components/ModelMultiSelect";
 import { Modal } from "../components/Modal";
 import { useToast } from "../components/Toast";
 import {
-  IconAlert, IconChevronDown, IconKey, IconLock, IconPlus, IconTrash,
+  IconAlert, IconCheck, IconChevronDown, IconClock, IconKey, IconLock,
+  IconPlus, IconTrash,
 } from "../icons";
 import type { CreatedKey, HubKey } from "../types";
+
+const SPEND_PRESETS = [
+  { label: "$1/day", value: "1", note: "testing" },
+  { label: "$5/day", value: "5", note: "small app" },
+  { label: "$20/day", value: "20", note: "production" },
+] as const;
+
+const RATE_PRESETS = [
+  { label: "30/min", value: "30", note: "careful" },
+  { label: "60/min", value: "60", note: "default" },
+  { label: "300/min", value: "300", note: "busy" },
+] as const;
 
 function CreateKeyModal({
   onClose, onCreated,
@@ -26,7 +39,13 @@ function CreateKeyModal({
   const toast = useToast();
 
   const nameOk = /^[a-z0-9][a-z0-9-_]{0,99}$/i.test(name);
-  const valid = nameOk;
+  const capNumber = Number(cap);
+  const rateNumber = Number(rate);
+  const capOk = Number.isFinite(capNumber) && capNumber > 0;
+  const rateOk = Number.isInteger(rateNumber) && rateNumber >= 1;
+  const valid = nameOk && capOk && rateOk;
+  const capSummary = capOk ? `$${capNumber.toFixed(2)}/day` : "$1.00/day";
+  const rateSummary = rateOk ? `${rateNumber}/min` : "60/min";
 
   const submit = async () => {
     if (!valid || submitting) return;
@@ -36,8 +55,8 @@ function CreateKeyModal({
       const created = await api.createKey({
         name: name.trim(),
         allowed_models: modelList,
-        daily_spend_cap_usd: Number(cap),
-        rate_limit_per_min: Number(rate),
+        daily_spend_cap_usd: capNumber,
+        rate_limit_per_min: rateNumber,
       });
       toast(`Created ${created.name}`);
       onCreated(created);
@@ -83,7 +102,9 @@ function CreateKeyModal({
           id="k-name" className="input mono" placeholder="production-web"
           value={name} onChange={e => setName(e.target.value)} autoFocus
         />
-        <span className="hint">A label only you see — pick something that maps to where it's used.</span>
+        <span className={`hint ${name && !nameOk ? "field-error" : ""}`}>
+          Use letters, numbers, hyphens, or underscores. Example: production-web.
+        </span>
       </div>
 
       <div className="field">
@@ -102,27 +123,86 @@ function CreateKeyModal({
         </span>
       </div>
 
-      <div className="grid-2">
-        <div className="field">
-          <label htmlFor="k-cap">Daily spend cap</label>
-          <div className="input-prefix">
-            <span className="pfx mono">$</span>
-            <input
-              id="k-cap" type="number" min="0" step="0.01"
-              className="input mono tnum"
-              value={cap} onChange={e => setCap(e.target.value)}
-            />
+      <div className="limit-builder">
+        <div className="limit-intro">
+          <div>
+            <div className="limit-kicker">Safety limits</div>
+            <div className="limit-title">Daily budget and request pace</div>
           </div>
-          <span className="hint">Calls refused for the rest of the UTC day once hit.</span>
+          <span className="limit-reset"><IconClock />UTC day</span>
         </div>
-        <div className="field">
-          <label htmlFor="k-rate">Rate limit</label>
-          <input
-            id="k-rate" type="number" min="1" step="1"
-            className="input mono tnum"
-            value={rate} onChange={e => setRate(e.target.value)}
-          />
-          <span className="hint">Requests per minute (per key).</span>
+
+        <div className="grid-2">
+          <div className="field key-limit-field">
+            <div className="field-row">
+              <label htmlFor="k-cap">Daily budget</label>
+              <span className="mini-note">hard stop</span>
+            </div>
+            <div className="preset-row" aria-label="Daily budget presets">
+              {SPEND_PRESETS.map(p => (
+                <button
+                  key={p.value}
+                  type="button"
+                  className={`preset-btn ${cap === p.value ? "on" : ""}`}
+                  onClick={() => setCap(p.value)}
+                >
+                  <strong>{p.label}</strong>
+                  <span>{p.note}</span>
+                </button>
+              ))}
+            </div>
+            <div className="input-prefix">
+              <span className="pfx mono">$</span>
+              <input
+                id="k-cap" type="number" min="0.01" step="0.01"
+                className="input mono tnum"
+                value={cap} onChange={e => setCap(e.target.value)}
+                aria-invalid={!capOk}
+              />
+            </div>
+            <span className={`hint ${cap && !capOk ? "field-error" : ""}`}>
+              Pauses this key once it reaches the daily spend limit.
+            </span>
+          </div>
+          <div className="field key-limit-field">
+            <div className="field-row">
+              <label htmlFor="k-rate">Rate limit</label>
+              <span className="mini-note">per key</span>
+            </div>
+            <div className="preset-row" aria-label="Rate limit presets">
+              {RATE_PRESETS.map(p => (
+                <button
+                  key={p.value}
+                  type="button"
+                  className={`preset-btn ${rate === p.value ? "on" : ""}`}
+                  onClick={() => setRate(p.value)}
+                >
+                  <strong>{p.label}</strong>
+                  <span>{p.note}</span>
+                </button>
+              ))}
+            </div>
+            <div className="input-suffix">
+              <input
+                id="k-rate" type="number" min="1" step="1"
+                className="input mono tnum"
+                value={rate} onChange={e => setRate(e.target.value)}
+                aria-invalid={!rateOk}
+              />
+              <span className="sfx mono">req/min</span>
+            </div>
+            <span className={`hint ${rate && !rateOk ? "field-error" : ""}`}>
+              60/min is a good default for one app.
+            </span>
+          </div>
+        </div>
+
+        <div className="policy-summary" role="status">
+          <IconCheck />
+          <span>
+            This key stops at <strong>{capSummary}</strong> and allows{" "}
+            <strong>{rateSummary}</strong>. The spend budget resets daily at UTC midnight.
+          </span>
         </div>
       </div>
     </Modal>

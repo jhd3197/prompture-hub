@@ -337,6 +337,62 @@ def delete_conversation(
 # ---------------------------------------------------------------------------
 
 
+@router.get("/workspace/dirs")
+def list_workspace_dirs(
+    max_depth: int = 3,
+    limit: int = 200,
+    _user: User = Depends(require_user),
+) -> dict[str, Any]:
+    """List directories under ``HUB_AGENT_WORKSPACE`` for the FolderPicker.
+
+    Walks up to ``max_depth`` levels deep (default 3) and caps at ``limit``
+    entries (default 200) so a huge workspace doesn't bog the dropdown
+    down. Symlinks are not followed; hidden / dotfile dirs are skipped.
+
+    Paths are returned relative to the workspace root, ``/`` separated
+    regardless of OS, so the frontend doesn't need to care about Windows
+    vs POSIX backslashes when echoing them back as ``cwd`` on the run
+    request.
+    """
+    from pathlib import Path
+
+    workspace = Path(get_settings().agent_workspace).expanduser().resolve()
+    workspace.mkdir(parents=True, exist_ok=True)
+
+    rels: list[str] = []
+    truncated = False
+
+    def walk(d: Path, depth: int) -> None:
+        nonlocal truncated
+        if truncated or depth > max_depth:
+            return
+        try:
+            entries = sorted(d.iterdir(), key=lambda p: p.name.lower())
+        except (PermissionError, OSError):
+            return
+        for entry in entries:
+            if not entry.is_dir() or entry.is_symlink():
+                continue
+            if entry.name.startswith("."):
+                continue
+            rel = entry.resolve().relative_to(workspace).as_posix()
+            if rel:
+                rels.append(rel)
+                if len(rels) >= limit:
+                    truncated = True
+                    return
+            walk(entry, depth + 1)
+
+    walk(workspace, 1)
+
+    return {
+        "workspace": str(workspace),
+        "dirs": rels,
+        "truncated": truncated,
+        "max_depth": max_depth,
+    }
+
+
 @router.post("/agents/run")
 async def run_agent_console(
     body: RunAgentRequest,

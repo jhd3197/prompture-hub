@@ -54,6 +54,12 @@ export const api = {
   models: () => request<ModelsResponse>("/api/models"),
   agents: () => request<AgentsResponse>("/api/agents"),
   modalities: () => request<ModalitiesResponse>("/api/modalities"),
+  workspaceDirs: () => request<{
+    workspace: string;
+    dirs: string[];
+    truncated: boolean;
+    max_depth: number;
+  }>("/api/workspace/dirs"),
   runAgent: (body: {
     agent: string;
     task: string;

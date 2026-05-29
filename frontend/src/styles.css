@@ -319,6 +319,12 @@ table.tbl td.strong { color: var(--text); font-weight: 600; }
 .field { display: flex; flex-direction: column; gap: 6px; }
 .field label { font-size: 12.5px; font-weight: 600; color: var(--text); }
 .field .hint { font-size: 12px; color: var(--text-3); }
+.field-row { display: flex; align-items: center; justify-content: space-between; gap: 10px; }
+.field-error { color: var(--danger) !important; }
+.mini-note {
+  font-size: 11px; font-weight: 700; color: var(--text-faint);
+  text-transform: uppercase; letter-spacing: 0.04em;
+}
 .input, .textarea, select.input {
   width: 100%; padding: 9px 12px;
   border: 1px solid var(--border-strong); border-radius: var(--r-sm);
@@ -330,11 +336,70 @@ table.tbl td.strong { color: var(--text); font-weight: 600; }
   outline: none; border-color: var(--accent);
   box-shadow: 0 0 0 3px var(--accent-ring);
 }
+.input[aria-invalid="true"] { border-color: var(--danger); }
+.input[aria-invalid="true"]:focus { box-shadow: 0 0 0 3px color-mix(in oklch, var(--danger) 24%, transparent); }
 .textarea { resize: vertical; min-height: 64px; font-family: var(--font-mono); font-size: 12.5px; line-height: 1.6; }
 
 .input-prefix { position: relative; display: flex; align-items: center; }
 .input-prefix .pfx { position: absolute; left: 11px; color: var(--text-faint); pointer-events: none; }
 .input-prefix .input { padding-left: 28px; }
+.input-suffix { position: relative; display: flex; align-items: center; }
+.input-suffix .input { padding-right: 78px; }
+.input-suffix .sfx {
+  position: absolute; right: 11px; color: var(--text-faint);
+  pointer-events: none; font-size: 12px;
+}
+
+.limit-builder {
+  display: flex; flex-direction: column; gap: 14px;
+  padding: 14px; border: 1px solid var(--border);
+  border-radius: var(--r-md); background: var(--surface-2);
+}
+.limit-intro { display: flex; align-items: flex-start; justify-content: space-between; gap: 14px; }
+.limit-kicker {
+  font-size: 11px; font-weight: 800; color: var(--accent-strong);
+  text-transform: uppercase; letter-spacing: 0.05em;
+}
+.limit-title { margin-top: 2px; font-size: 14px; font-weight: 750; color: var(--text); }
+.limit-reset {
+  flex: none; display: inline-flex; align-items: center; gap: 6px;
+  padding: 5px 8px; border-radius: var(--r-sm); background: var(--surface);
+  border: 1px solid var(--border); color: var(--text-3);
+  font-size: 11.5px; font-weight: 700;
+}
+.limit-reset svg { width: 13px; height: 13px; color: var(--accent-strong); }
+.key-limit-field { min-width: 0; }
+.preset-row {
+  display: grid; grid-template-columns: repeat(3, minmax(0, 1fr));
+  gap: 6px;
+}
+.preset-btn {
+  min-height: 52px; display: flex; flex-direction: column; align-items: flex-start;
+  justify-content: center; gap: 2px; text-align: left;
+  border: 1px solid var(--border-strong); border-radius: var(--r-sm);
+  background: var(--surface); color: var(--text-2);
+  padding: 7px 8px; transition: background .12s, border-color .12s, color .12s, box-shadow .12s;
+}
+.preset-btn:hover { border-color: var(--text-faint); color: var(--text); }
+.preset-btn.on {
+  background: var(--accent-soft); border-color: var(--accent);
+  color: var(--accent-strong); box-shadow: 0 0 0 2px var(--accent-ring);
+}
+.preset-btn strong { font-size: 12.5px; font-weight: 800; line-height: 1.1; color: inherit; }
+.preset-btn span { font-size: 11px; font-weight: 650; color: var(--text-3); }
+.preset-btn.on span { color: var(--accent-strong); }
+.policy-summary {
+  display: flex; align-items: flex-start; gap: 10px;
+  padding: 10px 12px; border-radius: var(--r-sm);
+  border: 1px solid color-mix(in oklch, var(--accent) 35%, var(--border));
+  background: var(--accent-softer); color: var(--text-2);
+  font-size: 12.5px; line-height: 1.45;
+}
+.policy-summary svg {
+  width: 16px; height: 16px; flex: none; margin-top: 1px;
+  color: var(--accent-strong);
+}
+.policy-summary strong { color: var(--text); font-weight: 750; }
 
 /* ============================================================
    Stat cards

@@ -4,6 +4,7 @@ import {
   IconAlert, IconBolt, IconCheck, IconRefresh, IconTerminal, IconX,
 } from "../icons";
 import type { AgentInfo } from "../types";
+import { FolderPicker } from "./FolderPicker";
 import { Modal } from "./Modal";
 import { ModelSelect } from "./ModelSelect";
 
@@ -405,14 +406,16 @@ export function RunAgentModal({
           <div className="grid-2">
             <div className="field">
               <label htmlFor="agent-cwd">Subpath under workspace <span className="faint" style={{ fontWeight: 500 }}>(optional)</span></label>
-              <input
+              <FolderPicker
                 id="agent-cwd"
-                className="input mono"
                 value={cwd}
-                onChange={e => setCwd(e.target.value)}
+                onChange={setCwd}
                 placeholder="my-project"
               />
-              <span className="hint">Empty = workspace root. Hub refuses paths that escape the workspace.</span>
+              <span className="hint">
+                Pick an existing folder or type a new one — it'll be created on the fly.
+                Empty = workspace root. Hub refuses paths that escape the workspace.
+              </span>
             </div>
             <div className="field">
               <label htmlFor="agent-args">Extra CLI args <span className="faint" style={{ fontWeight: 500 }}>(optional)</span></label>
