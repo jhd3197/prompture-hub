@@ -344,6 +344,15 @@ def models() -> dict[str, Any]:
     except Exception as exc:  # noqa: BLE001
         discovery_error = str(exc)
 
+    # Branding is a soft dependency on Prompture — older installs without
+    # provider_branding still work, the groups just come back without
+    # display metadata.
+    try:
+        from prompture.drivers import get_provider_brand, icon_url
+    except ImportError:  # pragma: no cover
+        get_provider_brand = lambda _name: None  # noqa: E731
+        icon_url = lambda _brand: None  # noqa: E731
+
     by_provider: dict[str, list[str]] = {}
     for n in names:
         if "/" in n:
@@ -354,10 +363,18 @@ def models() -> dict[str, Any]:
     for ms in by_provider.values():
         ms.sort()
 
-    groups = [
-        {"provider": provider, "models": ms}
-        for provider, ms in sorted(by_provider.items())
-    ]
+    groups: list[dict[str, Any]] = []
+    for provider, ms in sorted(by_provider.items()):
+        brand = get_provider_brand(provider)
+        groups.append({
+            "provider": provider,
+            "models": ms,
+            "display_name": brand.display_name if brand else None,
+            "icon_url": icon_url(brand),
+            "brand_color": brand.brand_color if brand else None,
+            "is_local": brand.is_local if brand else False,
+        })
+
     return {
         "groups": groups,
         "total": len(names),

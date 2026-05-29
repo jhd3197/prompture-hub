@@ -43,6 +43,10 @@ export interface Overview {
 export interface ProviderGroup {
   provider: string;
   models: string[];
+  display_name: string | null;
+  icon_url: string | null;
+  brand_color: string | null;
+  is_local: boolean;
 }
 
 export interface ModelsResponse {

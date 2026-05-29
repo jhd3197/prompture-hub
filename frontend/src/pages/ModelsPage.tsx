@@ -1,6 +1,7 @@
 import { useEffect, useMemo, useState } from "react";
 import { api } from "../api";
 import { EmptyState } from "../components/EmptyState";
+import { ProviderLogo } from "../components/ProviderLogo";
 import { SnippetModal } from "../components/SnippetModal";
 import {
   IconAlert, IconChevronRight, IconCopy, IconGrid, IconKey, IconLayers,
@@ -74,11 +75,18 @@ function ProviderRow({
         <span className="provider-chevron">
           <IconChevronRight style={{ width: 16, height: 16 }} />
         </span>
-        <span className="provider-logo">{initials}</span>
+        <ProviderLogo
+          iconUrl={group.icon_url}
+          brandColor={group.brand_color}
+          fallback={initials}
+        />
         <div className="grow" style={{ minWidth: 0 }}>
           <div className="row" style={{ gap: 9 }}>
-            <span className="provider-name">{group.provider}</span>
+            <span className="provider-name">
+              {group.display_name || group.provider}
+            </span>
             <span className="mono faint" style={{ fontSize: 11.5 }}>{group.provider}/</span>
+            {group.is_local && <span className="badge" style={{ fontSize: 10.5 }}>local</span>}
           </div>
           <div className="provider-meta">
             {matched.length} model{matched.length !== 1 ? "s" : ""}{q ? " match" : ""}
