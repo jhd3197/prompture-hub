@@ -188,6 +188,25 @@ prompture-hub/
         └── styles.css       Design system (light + dark via [data-theme])
 ```
 
+### Migrations
+
+Schema is managed by [Alembic](https://alembic.sqlalchemy.org/). Every app boot runs `alembic upgrade head` programmatically, so deployments self-migrate.
+
+```bash
+# After changing a model in src/prompture_hub/storage/models.py:
+alembic revision --autogenerate -m "add foo column to hubkey"
+# Inspect the new file in alembic/versions/ — autogenerate is a hint,
+# not a substitute for reviewing the SQL it emits.
+```
+
+If you have an old SQLite from before Alembic was introduced and it
+already has tables but no `alembic_version` row, the cleanest path is to
+delete it and let init_db create the new schema fresh:
+
+```bash
+rm prompture_hub*.db
+```
+
 ### Frontend dev loop
 
 ```bash

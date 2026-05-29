@@ -13,5 +13,7 @@ build
 dist
 .env
 prompture_hub.db
+prompture_hub_dev.db
 tests
 frontend/node_modules
+**/__pycache__

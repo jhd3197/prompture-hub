@@ -23,8 +23,9 @@ RUN apt-get update \
 
 WORKDIR /app
 
-COPY pyproject.toml README.md ./
+COPY pyproject.toml README.md alembic.ini ./
 COPY src ./src
+COPY alembic ./alembic
 
 # Bring in the built SPA bundle from the frontend stage.
 COPY --from=frontend /build/src/prompture_hub/static/app ./src/prompture_hub/static/app

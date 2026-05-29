@@ -64,3 +64,5 @@ frontend/node_modules/
 frontend/dist/
 src/prompture_hub/static/app/
 *.tsbuildinfo
+prompture_hub*.db
+prompture_hub*.db-*
