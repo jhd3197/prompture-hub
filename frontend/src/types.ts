@@ -6,11 +6,14 @@ export interface CurrentUser {
   provider: string;
 }
 
+export type SpendPeriod = "day" | "week" | "month";
+
 export interface HubKey {
   id: number;
   name: string;
   allowed_models: string[];
   daily_spend_cap_usd: number;
+  spend_period: SpendPeriod;
   rate_limit_per_min: number;
   created_at: string;
   revoked_at: string | null;
@@ -109,6 +112,7 @@ export interface CreatedKey {
   key: string;
   allowed_models: string[];
   daily_spend_cap_usd: number;
+  spend_period: SpendPeriod;
   rate_limit_per_min: number;
 }
 

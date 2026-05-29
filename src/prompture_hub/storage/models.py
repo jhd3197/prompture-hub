@@ -27,7 +27,17 @@ class HubKey(SQLModel, table=True):
     name: str = Field(index=True, description="Human label, e.g. 'sketchy-app-1'.")
     hashed_secret: str = Field(unique=True, index=True)
     allowed_models: list[str] = Field(default_factory=list, sa_column=Column(JSON))
-    daily_spend_cap_usd: float = Field(default=1.0)
+    daily_spend_cap_usd: float = Field(
+        default=1.0,
+        description=(
+            "Cap value; the period it applies over is given by ``spend_period``. "
+            "Name kept for backwards compatibility with the v0 schema."
+        ),
+    )
+    spend_period: str = Field(
+        default="day",
+        description="day | week | month — UTC-anchored window the cap resets on.",
+    )
     rate_limit_per_min: int = Field(default=60)
     created_at: datetime = Field(default_factory=_utcnow)
     revoked_at: Optional[datetime] = Field(default=None, index=True)

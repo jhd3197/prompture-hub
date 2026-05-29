@@ -44,6 +44,7 @@ export const api = {
     name: string;
     allowed_models: string[];
     daily_spend_cap_usd: number;
+    spend_period: "day" | "week" | "month";
     rate_limit_per_min: number;
   }) => request<CreatedKey>("/api/keys", {
     method: "POST",

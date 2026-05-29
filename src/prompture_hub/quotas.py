@@ -41,15 +41,41 @@ STATUS_QUOTA_EXCEEDED = "quota_exceeded"
 STATUS_RATE_LIMITED = "rate_limited"
 
 
-def _spend_today(key_id: int) -> float:
-    day_start = datetime.now(timezone.utc).replace(
-        hour=0, minute=0, second=0, microsecond=0,
-    )
+def _window_start(period: str) -> datetime:
+    """First UTC instant of the current cap window for ``period``.
+
+    - ``day``   → UTC midnight today
+    - ``week``  → most recent Monday 00:00 UTC (ISO weeks start Monday)
+    - ``month`` → 1st of the current UTC month at 00:00
+    """
+    now = datetime.now(timezone.utc)
+    p = (period or "day").lower()
+    if p == "week":
+        monday = now - timedelta(days=now.weekday())
+        return monday.replace(hour=0, minute=0, second=0, microsecond=0)
+    if p == "month":
+        return now.replace(day=1, hour=0, minute=0, second=0, microsecond=0)
+    # default: day
+    return now.replace(hour=0, minute=0, second=0, microsecond=0)
+
+
+def _period_label(period: str) -> str:
+    p = (period or "day").lower()
+    if p == "week":
+        return "this UTC week (Mon–Sun)"
+    if p == "month":
+        return "this UTC month"
+    return "the rest of the UTC day"
+
+
+def _spend_in_window(key_id: int, period: str) -> float:
+    """Sum cost_usd inside the cap window for ``period``."""
+    window_start = _window_start(period)
     with get_session() as session:
         total = session.exec(
             select(func.coalesce(func.sum(UsageRecord.cost_usd), 0.0))
             .where(UsageRecord.key_id == key_id)
-            .where(UsageRecord.timestamp >= day_start)
+            .where(UsageRecord.timestamp >= window_start)
         ).one()
     return float(total or 0.0)
 
@@ -85,14 +111,16 @@ def check_quotas(key: HubKey, endpoint: str = "", model: str = "") -> None:
 
     Spend is checked first; over-cap requests can't bypass it by being slow.
     """
-    spent = _spend_today(key.id)
+    period = getattr(key, "spend_period", "day") or "day"
+    spent = _spend_in_window(key.id, period)
     if spent >= key.daily_spend_cap_usd:
         _record_rejection(key.id, endpoint, model, STATUS_QUOTA_EXCEEDED)
         raise HTTPException(
             status_code=status.HTTP_402_PAYMENT_REQUIRED,
             detail=(
-                f"Daily spend cap of ${key.daily_spend_cap_usd:.2f} reached "
-                f"(${spent:.4f} spent today). Resets at UTC midnight."
+                f"Spend cap of ${key.daily_spend_cap_usd:.2f} per {period} "
+                f"reached (${spent:.4f} spent so far). "
+                f"Refusing calls for {_period_label(period)}."
             ),
         )
 

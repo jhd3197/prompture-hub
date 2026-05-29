@@ -175,6 +175,107 @@ def test_error_rows_count_toward_rate_but_not_spend():
     assert r.status_code == 429
 
 
+def _seed_usage_at(
+    key_id: int, *, cost: float, when: datetime, count: int = 1,
+) -> None:
+    from prompture_hub.storage.db import get_session
+    from prompture_hub.storage.models import UsageRecord
+    with get_session() as session:
+        for _ in range(count):
+            session.add(UsageRecord(
+                key_id=key_id, model="fake/model",
+                endpoint="/v1/chat/completions",
+                cost_usd=cost, status="ok", timestamp=when,
+            ))
+        session.commit()
+
+
+def _create_key_with_period(
+    cap: float, period: str, name: str = "period-test",
+) -> str:
+    r = _client().post(
+        "/admin/keys",
+        headers={"Authorization": "Bearer test-token"},
+        json={
+            "name": name,
+            "allowed_models": ["fake/model"],
+            "daily_spend_cap_usd": cap,
+            "spend_period": period,
+            "rate_limit_per_min": 1000,
+        },
+    )
+    assert r.status_code == 201, r.text
+    return r.json()["key"]
+
+
+def test_weekly_cap_counts_yesterday():
+    """For a weekly cap, spend from earlier this week should count."""
+    pt = _create_key_with_period(cap=0.50, period="week", name="weekly")
+    kid = _key_id_for("weekly")
+    # Yesterday (still inside the week): $0.50 already spent.
+    yesterday = datetime.now(timezone.utc) - timedelta(days=1)
+    _seed_usage_at(kid, cost=0.50, when=yesterday)
+
+    r = _client().post(
+        "/v1/chat/completions",
+        headers={"Authorization": f"Bearer {pt}"},
+        json={"model": "fake/model", "messages": [{"role": "user", "content": "hi"}]},
+    )
+    assert r.status_code == 402, r.text
+    assert "week" in r.json()["detail"].lower()
+
+
+def test_daily_cap_does_not_count_yesterday():
+    """Same key as above but day-scoped: yesterday's spend doesn't count."""
+    pt = _create_key_with_period(cap=0.50, period="day", name="daily")
+    kid = _key_id_for("daily")
+    yesterday = datetime.now(timezone.utc) - timedelta(days=1)
+    _seed_usage_at(kid, cost=0.50, when=yesterday)
+
+    # No fake driver, but quota check happens BEFORE driver dispatch.
+    # We should NOT see 402, the request gets past the gate.
+    r = _client(raise_server_exceptions=False).post(
+        "/v1/chat/completions",
+        headers={"Authorization": f"Bearer {pt}"},
+        json={"model": "fake/model", "messages": [{"role": "user", "content": "hi"}]},
+    )
+    assert r.status_code != 402
+
+
+def test_monthly_cap_counts_last_week():
+    pt = _create_key_with_period(cap=5.00, period="month", name="monthly")
+    kid = _key_id_for("monthly")
+    # Eight days ago — still inside the calendar month if today's > 8th.
+    now = datetime.now(timezone.utc)
+    if now.day <= 8:
+        pytest.skip("test is meaningful only after the 8th of the month")
+    eight_days_ago = now - timedelta(days=8)
+    _seed_usage_at(kid, cost=5.00, when=eight_days_ago)
+
+    r = _client().post(
+        "/v1/chat/completions",
+        headers={"Authorization": f"Bearer {pt}"},
+        json={"model": "fake/model", "messages": [{"role": "user", "content": "hi"}]},
+    )
+    assert r.status_code == 402
+    assert "month" in r.json()["detail"].lower()
+
+
+def test_invalid_period_returns_400():
+    r = _client().post(
+        "/admin/keys",
+        headers={"Authorization": "Bearer test-token"},
+        json={
+            "name": "bad-period",
+            "allowed_models": ["fake/model"],
+            "daily_spend_cap_usd": 1.0,
+            "spend_period": "fortnight",
+        },
+    )
+    assert r.status_code == 400
+    assert "period" in r.json()["detail"].lower()
+
+
 def test_rejection_is_recorded_in_usage():
     plaintext = _create_key(daily_cap=0.10, rate_per_min=1000)
     kid = _key_id_for("quota-test")

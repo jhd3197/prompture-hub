@@ -34,6 +34,7 @@ def _serialize_key(k: HubKey) -> dict[str, Any]:
         "name": k.name,
         "allowed_models": k.allowed_models,
         "daily_spend_cap_usd": k.daily_spend_cap_usd,
+        "spend_period": getattr(k, "spend_period", "day") or "day",
         "rate_limit_per_min": k.rate_limit_per_min,
         "created_at": k.created_at.isoformat(),
         "revoked_at": k.revoked_at.isoformat() if k.revoked_at else None,
@@ -145,6 +146,7 @@ class CreateKeyBody(BaseModel):
     name: str = Field(min_length=1, max_length=100)
     allowed_models: list[str] = Field(default_factory=list)
     daily_spend_cap_usd: float = Field(default=1.0, ge=0)
+    spend_period: str = Field(default="day")
     rate_limit_per_min: int = Field(default=60, ge=1)
 
 
@@ -155,12 +157,19 @@ def create_key(
 ) -> dict[str, Any]:
     plaintext, hashed = generate_key()
     user_id = user.id if (user.id and user.id > 0) else None
+    period = (body.spend_period or "day").lower()
+    if period not in {"day", "week", "month"}:
+        raise HTTPException(
+            status_code=status.HTTP_400_BAD_REQUEST,
+            detail=f"spend_period must be day|week|month, got {body.spend_period!r}",
+        )
     with get_session() as session:
         row = HubKey(
             name=body.name.strip(),
             hashed_secret=hashed,
             allowed_models=[m.strip() for m in body.allowed_models if m.strip()],
             daily_spend_cap_usd=body.daily_spend_cap_usd,
+            spend_period=period,
             rate_limit_per_min=body.rate_limit_per_min,
             user_id=user_id,
         )
@@ -173,6 +182,7 @@ def create_key(
             "key": plaintext,
             "allowed_models": row.allowed_models,
             "daily_spend_cap_usd": row.daily_spend_cap_usd,
+            "spend_period": row.spend_period,
             "rate_limit_per_min": row.rate_limit_per_min,
         }
 

@@ -10,19 +10,31 @@ import {
   IconAlert, IconCheck, IconChevronDown, IconClock, IconKey, IconLock,
   IconPlus, IconTrash,
 } from "../icons";
-import type { CreatedKey, HubKey } from "../types";
+import type { CreatedKey, HubKey, SpendPeriod } from "../types";
 
-const SPEND_PRESETS = [
-  { label: "$1/day", value: "1", note: "testing" },
-  { label: "$5/day", value: "5", note: "small app" },
-  { label: "$20/day", value: "20", note: "production" },
-] as const;
+const PERIOD_OPTIONS: Array<{ value: SpendPeriod; label: string; resetCopy: string }> = [
+  { value: "day", label: "Per day", resetCopy: "resets daily at UTC midnight" },
+  { value: "week", label: "Per week", resetCopy: "resets Monday 00:00 UTC" },
+  { value: "month", label: "Per month", resetCopy: "resets on the 1st of the month, UTC" },
+];
+
+// Period-aware spend presets. Same "shape" of choices (testing / small / prod)
+// translated into amounts that make sense at that timescale.
+const SPEND_PRESETS_BY_PERIOD: Record<SpendPeriod, Array<{ value: string; note: string }>> = {
+  day:   [{ value: "1",   note: "testing" }, { value: "5",   note: "small app" }, { value: "20",  note: "production" }],
+  week:  [{ value: "5",   note: "testing" }, { value: "25",  note: "small app" }, { value: "100", note: "production" }],
+  month: [{ value: "20",  note: "testing" }, { value: "100", note: "small app" }, { value: "500", note: "production" }],
+};
 
 const RATE_PRESETS = [
-  { label: "30/min", value: "30", note: "careful" },
-  { label: "60/min", value: "60", note: "default" },
-  { label: "300/min", value: "300", note: "busy" },
+  { label: "30/min", value: "30", note: "1 every 2s" },
+  { label: "60/min", value: "60", note: "default · 1/s" },
+  { label: "300/min", value: "300", note: "burst" },
 ] as const;
+
+function periodSuffix(p: SpendPeriod): string {
+  return p === "day" ? "day" : p === "week" ? "week" : "month";
+}
 
 function CreateKeyModal({
   onClose, onCreated,
@@ -32,6 +44,7 @@ function CreateKeyModal({
 }) {
   const [name, setName] = useState("");
   const [modelList, setModelList] = useState<string[]>([]);
+  const [period, setPeriod] = useState<SpendPeriod>("day");
   const [cap, setCap] = useState("1");
   const [rate, setRate] = useState("60");
   const [submitting, setSubmitting] = useState(false);
@@ -44,8 +57,24 @@ function CreateKeyModal({
   const capOk = Number.isFinite(capNumber) && capNumber > 0;
   const rateOk = Number.isInteger(rateNumber) && rateNumber >= 1;
   const valid = nameOk && capOk && rateOk;
-  const capSummary = capOk ? `$${capNumber.toFixed(2)}/day` : "$1.00/day";
+  const capSummary = capOk
+    ? `$${capNumber.toFixed(2)}/${periodSuffix(period)}`
+    : `$1.00/${periodSuffix(period)}`;
   const rateSummary = rateOk ? `${rateNumber}/min` : "60/min";
+  const periodCopy = PERIOD_OPTIONS.find(o => o.value === period)?.resetCopy ?? "";
+
+  // Swap the cap to the nearest preset for this period when the user
+  // switches periods, so the dollar amount tracks the timescale (testing
+  // is testing whether per-day or per-month).
+  const onPeriodChange = (next: SpendPeriod) => {
+    const oldPresets = SPEND_PRESETS_BY_PERIOD[period];
+    const newPresets = SPEND_PRESETS_BY_PERIOD[next];
+    const idx = oldPresets.findIndex(p => p.value === cap);
+    if (idx >= 0) {
+      setCap(newPresets[idx].value);
+    }
+    setPeriod(next);
+  };
 
   const submit = async () => {
     if (!valid || submitting) return;
@@ -56,6 +85,7 @@ function CreateKeyModal({
         name: name.trim(),
         allowed_models: modelList,
         daily_spend_cap_usd: capNumber,
+        spend_period: period,
         rate_limit_per_min: rateNumber,
       });
       toast(`Created ${created.name}`);
@@ -127,26 +157,47 @@ function CreateKeyModal({
         <div className="limit-intro">
           <div>
             <div className="limit-kicker">Safety limits</div>
-            <div className="limit-title">Daily budget and request pace</div>
+            <div className="limit-title">Spend budget and request pace</div>
           </div>
-          <span className="limit-reset"><IconClock />UTC day</span>
+          <span className="limit-reset"><IconClock />{periodCopy}</span>
+        </div>
+
+        <div className="field" style={{ marginBottom: 14 }}>
+          <div className="field-row">
+            <label>Reset window</label>
+            <span className="mini-note">when the budget refreshes</span>
+          </div>
+          <div className="seg" role="radiogroup" aria-label="Spend period">
+            {PERIOD_OPTIONS.map(opt => (
+              <button
+                key={opt.value}
+                type="button"
+                role="radio"
+                aria-checked={period === opt.value}
+                className={period === opt.value ? "on" : ""}
+                onClick={() => onPeriodChange(opt.value)}
+              >
+                {opt.label}
+              </button>
+            ))}
+          </div>
         </div>
 
         <div className="grid-2">
           <div className="field key-limit-field">
             <div className="field-row">
-              <label htmlFor="k-cap">Daily budget</label>
-              <span className="mini-note">hard stop</span>
+              <label htmlFor="k-cap">Spend budget</label>
+              <span className="mini-note">hard stop · per {periodSuffix(period)}</span>
             </div>
-            <div className="preset-row" aria-label="Daily budget presets">
-              {SPEND_PRESETS.map(p => (
+            <div className="preset-row" aria-label="Spend budget presets">
+              {SPEND_PRESETS_BY_PERIOD[period].map(p => (
                 <button
                   key={p.value}
                   type="button"
                   className={`preset-btn ${cap === p.value ? "on" : ""}`}
                   onClick={() => setCap(p.value)}
                 >
-                  <strong>{p.label}</strong>
+                  <strong>${p.value}/{periodSuffix(period)}</strong>
                   <span>{p.note}</span>
                 </button>
               ))}
@@ -161,7 +212,7 @@ function CreateKeyModal({
               />
             </div>
             <span className={`hint ${cap && !capOk ? "field-error" : ""}`}>
-              Pauses this key once it reaches the daily spend limit.
+              Calls stop once the key reaches this amount for {periodCopy.replace(/^resets /, "the current ")}.
             </span>
           </div>
           <div className="field key-limit-field">
@@ -201,7 +252,7 @@ function CreateKeyModal({
           <IconCheck />
           <span>
             This key stops at <strong>{capSummary}</strong> and allows{" "}
-            <strong>{rateSummary}</strong>. The spend budget resets daily at UTC midnight.
+            <strong>{rateSummary}</strong>. Budget {periodCopy}.
           </span>
         </div>
       </div>
@@ -269,7 +320,7 @@ function RevokeKeyModal({
         <div>
           <div className="mono strong" style={{ fontWeight: 600 }}>{k.name} · key #{k.id}</div>
           <div className="faint" style={{ fontSize: 12 }}>
-            {k.allowed_models.length} model{k.allowed_models.length !== 1 ? "s" : ""} · ${k.daily_spend_cap_usd.toFixed(2)}/day cap
+            {k.allowed_models.length} model{k.allowed_models.length !== 1 ? "s" : ""} · ${k.daily_spend_cap_usd.toFixed(2)}/{periodSuffix(k.spend_period)} cap
           </div>
         </div>
       </div>
@@ -311,7 +362,7 @@ function KeyRow({ k, onRevoke }: { k: HubKey; onRevoke: (k: HubKey) => void }) {
           )}
         </td>
         <td className="num mono tnum">
-          ${k.daily_spend_cap_usd.toFixed(2)}<span className="faint" style={{ fontSize: 11 }}>/day</span>
+          ${k.daily_spend_cap_usd.toFixed(2)}<span className="faint" style={{ fontSize: 11 }}>/{periodSuffix(k.spend_period)}</span>
         </td>
         <td className="num mono tnum faint">{k.rate_limit_per_min}/min</td>
         <td className="faint mono" style={{ whiteSpace: "nowrap", fontSize: 12.5 }}>

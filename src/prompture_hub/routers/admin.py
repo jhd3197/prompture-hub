@@ -24,6 +24,10 @@ class CreateKeyRequest(BaseModel):
     name: str
     allowed_models: list[str] = Field(default_factory=list)
     daily_spend_cap_usd: float = 1.0
+    spend_period: str = Field(
+        default="day",
+        description="day | week | month — UTC window the spend cap resets on.",
+    )
     rate_limit_per_min: int = 60
     user_email: str | None = Field(
         default=None,
@@ -37,6 +41,7 @@ class CreateKeyResponse(BaseModel):
     key: str = Field(description="Plaintext key — shown ONCE. Save it now.")
     allowed_models: list[str]
     daily_spend_cap_usd: float
+    spend_period: str
     rate_limit_per_min: int
     user_id: int | None = None
     user_email: str | None = None
@@ -61,11 +66,19 @@ def create_key(body: CreateKeyRequest) -> CreateKeyResponse:
             user_id = user_row.id
             user_email = user_row.email
 
+        period = (body.spend_period or "day").lower()
+        if period not in {"day", "week", "month"}:
+            raise HTTPException(
+                status_code=status.HTTP_400_BAD_REQUEST,
+                detail=f"spend_period must be day|week|month, got {body.spend_period!r}",
+            )
+
         row = HubKey(
             name=body.name,
             hashed_secret=hashed,
             allowed_models=body.allowed_models,
             daily_spend_cap_usd=body.daily_spend_cap_usd,
+            spend_period=period,
             rate_limit_per_min=body.rate_limit_per_min,
             user_id=user_id,
         )
@@ -78,6 +91,7 @@ def create_key(body: CreateKeyRequest) -> CreateKeyResponse:
             key=plaintext,
             allowed_models=row.allowed_models,
             daily_spend_cap_usd=row.daily_spend_cap_usd,
+            spend_period=row.spend_period,
             rate_limit_per_min=row.rate_limit_per_min,
             user_id=user_id,
             user_email=user_email,
@@ -94,6 +108,7 @@ def list_keys() -> list[dict[str, Any]]:
                 "name": r.name,
                 "allowed_models": r.allowed_models,
                 "daily_spend_cap_usd": r.daily_spend_cap_usd,
+                "spend_period": r.spend_period,
                 "rate_limit_per_min": r.rate_limit_per_min,
                 "created_at": r.created_at.isoformat(),
                 "revoked_at": r.revoked_at.isoformat() if r.revoked_at else None,
