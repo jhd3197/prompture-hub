@@ -70,26 +70,42 @@ function build(route: string, kind: Kind): string {
   return promptureSnippet(route);
 }
 
-// Minimal syntax highlight — order matters: comments first so string
-// matching inside them doesn't fire, then strings, then keywords.
-function highlight(code: string): string {
+// Single-pass tokenizer keyed by language. Sequential regex passes were
+// double-wrapping themselves — the string pass would emit `class="tok-str"`
+// markup, and the keyword pass would then re-match the literal word
+// `class` inside it. One regex with alternation picks each token exactly
+// once and never sees its own output.
+function highlight(code: string, kind: Kind): string {
   const escape = (s: string) =>
     s.replace(/&/g, "&amp;").replace(/</g, "&lt;").replace(/>/g, "&gt;");
 
-  let html = escape(code);
-  html = html.replace(/(#[^\n]*)/g, '<span class="tok-com">$1</span>');
-  html = html.replace(/("(?:[^"\\]|\\.)*")/g, '<span class="tok-str">$1</span>');
-  html = html.replace(
-    /\b(from|import|class|print|return|def|if|else)\b/g,
-    '<span class="tok-key">$1</span>',
-  );
-  return html;
+  const escaped = escape(code);
+
+  // Shell snippets get only comments + strings — no Python keywords to
+  // mis-fire on, and the cURL flag list is too varied to color cleanly.
+  if (kind === "curl") {
+    const SHELL_RE = /(#[^\n]*)|("[^"]*"|'[^']*')/g;
+    return escaped.replace(SHELL_RE, (_m, comment, string) => {
+      if (comment) return `<span class="tok-com">${comment}</span>`;
+      if (string) return `<span class="tok-str">${string}</span>`;
+      return _m;
+    });
+  }
+
+  // Python / Prompture: comments → strings → keywords, all in one pass.
+  const PY_RE = /(#[^\n]*)|("(?:[^"\\]|\\.)*"|'(?:[^'\\]|\\.)*')|\b(from|import|class|def|return|print|if|else|as)\b/g;
+  return escaped.replace(PY_RE, (_m, comment, string, _strInner, keyword) => {
+    if (comment) return `<span class="tok-com">${comment}</span>`;
+    if (string) return `<span class="tok-str">${string}</span>`;
+    if (keyword) return `<span class="tok-key">${keyword}</span>`;
+    return _m;
+  });
 }
 
 export function SnippetModal({ route, onClose }: Props) {
   const [kind, setKind] = useState<Kind>("curl");
   const code = useMemo(() => build(route, kind), [route, kind]);
-  const html = useMemo(() => highlight(code), [code]);
+  const html = useMemo(() => highlight(code, kind), [code, kind]);
 
   return (
     <Modal
