@@ -4,15 +4,17 @@ The engine is lazily constructed on first access so module import is cheap
 and unit tests can swap ``HUB_DB_PATH`` (and clear the lru_cache on settings)
 before the engine is built.
 
-Schema is created and upgraded via Alembic — see ``alembic/`` at the repo
-root. :func:`init_db` runs ``alembic upgrade head`` programmatically at app
-startup so deployments self-migrate on boot, no manual step required.
+Schema is created and upgraded via Alembic. The migration environment lives
+*inside* the package at ``prompture_hub/migrations/`` so it ships in the wheel
+and is found the same way whether the app was installed from PyPI, run from a
+source checkout, or built into a container. :func:`init_db` runs
+``alembic upgrade head`` programmatically on every boot, so the schema always
+self-heals to the latest version with no manual step.
 """
 
 from __future__ import annotations
 
 import logging
-import os
 from collections.abc import Iterator
 from contextlib import contextmanager
 from pathlib import Path
@@ -25,10 +27,11 @@ logger = logging.getLogger(__name__)
 
 _engine = None
 
-# Path to the alembic config relative to this file. Resolved at runtime so
-# both editable installs and packaged installs see the right location.
-_REPO_ROOT = Path(__file__).resolve().parents[3]
-_ALEMBIC_INI = _REPO_ROOT / "alembic.ini"
+# The packaged migration environment (env.py, versions/). Resolved relative to
+# this module — NOT the repo root — so it works in an installed package where
+# there is no repo at all. The directory ships because it lives under the
+# prompture_hub package tree.
+_MIGRATIONS_DIR = Path(__file__).resolve().parent.parent / "migrations"
 
 
 def get_engine():
@@ -44,17 +47,24 @@ def get_engine():
 
 
 def init_db() -> None:
-    """Run ``alembic upgrade head`` so the DB matches the latest schema.
+    """Bring the database up to the latest schema. Runs on every boot.
 
-    Idempotent — safe to call on every startup. Falls back to
-    ``SQLModel.metadata.create_all`` only if ``alembic.ini`` can't be located
-    (e.g. running from an unusual install layout), to keep dev runs working.
+    Fresh databases get the full schema; existing ones get only the migrations
+    they are missing. Idempotent and safe to call on every startup — there is
+    no manual migration step for anyone running the hub.
+
+    The alembic config is assembled in code (no ``alembic.ini`` needed at
+    runtime) and pointed at the migrations bundled in the package, so this works
+    identically for PyPI installs, source checkouts, and containers.
     """
-    if not _ALEMBIC_INI.is_file():
+    if not _MIGRATIONS_DIR.is_dir():
+        # Should never happen in a correctly built package; guard so a broken
+        # install still produces a usable (if un-versioned) schema rather than
+        # crashing on boot.
         logger.warning(
-            "alembic.ini not found at %s; falling back to create_all. "
-            "Future schema changes won't auto-migrate.",
-            _ALEMBIC_INI,
+            "Packaged migrations not found at %s; falling back to create_all. "
+            "Schema changes won't auto-migrate — reinstall a complete build.",
+            _MIGRATIONS_DIR,
         )
         from sqlmodel import SQLModel
 
@@ -65,16 +75,12 @@ def init_db() -> None:
     from alembic import command
     from alembic.config import Config
 
-    cfg = Config(str(_ALEMBIC_INI))
-    # Pin the script_location to an absolute path so commands work no
-    # matter what cwd the server happens to start in.
-    cfg.set_main_option("script_location", str(_REPO_ROOT / "alembic"))
-    cfg.set_main_option(
-        "sqlalchemy.url", f"sqlite:///{get_settings().db_path}",
-    )
+    cfg = Config()
+    cfg.set_main_option("script_location", str(_MIGRATIONS_DIR))
+    cfg.set_main_option("sqlalchemy.url", f"sqlite:///{get_settings().db_path}")
 
     # Ensure the engine is built against the same path before running, so
-    # connection_pool behaviour matches.
+    # connection-pool behaviour matches.
     get_engine()
     command.upgrade(cfg, "head")
 

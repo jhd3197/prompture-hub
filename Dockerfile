@@ -25,7 +25,8 @@ WORKDIR /app
 
 COPY pyproject.toml README.md alembic.ini ./
 COPY src ./src
-COPY alembic ./alembic
+# Migrations live under src/prompture_hub/migrations (shipped with the package),
+# so there's no separate alembic/ dir to copy.
 
 # Bring in the built SPA bundle from the frontend stage.
 COPY --from=frontend /build/src/prompture_hub/static/app ./src/prompture_hub/static/app

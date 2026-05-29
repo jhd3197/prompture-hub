@@ -221,13 +221,14 @@ prompture-hub/
 │   │   ├── auth.py          /auth/{google,github}/start + /callback + /logout
 │   │   └── spa_api.py       /api/* — JSON consumed by the React SPA
 │   ├── storage/
-│   │   ├── db.py            SQLite engine + session factory
+│   │   ├── db.py            SQLite engine + session factory + init_db (auto-migrate)
 │   │   └── models.py        HubKey, UsageRecord, User, Conversation, Message
+│   ├── migrations/          Alembic env + versions/ (ships in the wheel; auto-applied on boot)
 │   └── static/
-│       └── app/             Built SPA bundle (output of `npm run build`)
+│       └── app/             Built SPA bundle (bundled into the package at build time)
 └── frontend/                Vite + React + TypeScript dashboard
     └── src/
-        ├── components/      Header, Modal, Toast, StatCard, TrustFlow, …
+        ├── components/      Sidebar, Modal, Toast, StatCard, TrustFlow, …
         ├── pages/           LoginPage, Dashboard, KeysPage, ModelsPage
         ├── api.ts           Typed fetch wrappers
         └── styles.css       Design system (light + dark via [data-theme])
@@ -235,14 +236,19 @@ prompture-hub/
 
 ### Migrations
 
-Schema is managed by [Alembic](https://alembic.sqlalchemy.org/). Every app boot runs `alembic upgrade head` programmatically, so deployments self-migrate.
+**You never run migrations.** The schema is managed by [Alembic](https://alembic.sqlalchemy.org/), and the migration environment ships *inside the package* (`prompture_hub/migrations/`). On every boot the app runs `alembic upgrade head` programmatically — a fresh database gets the full schema, an existing one gets only the migrations it's missing. Upgrading is just `pip install -U prompture-hub` (or pulling a newer image); the next start self-migrates.
+
+<details>
+<summary><b>Maintainers only</b> — authoring a migration after a model change</summary>
+
+After changing a model in `src/prompture_hub/storage/models.py`, generate a migration and commit it so it ships (and auto-applies) with the next release:
 
 ```bash
-# After changing a model in src/prompture_hub/storage/models.py:
 alembic revision --autogenerate -m "add foo column to hubkey"
-# Inspect the new file in alembic/versions/ — autogenerate is a hint,
-# not a substitute for reviewing the SQL it emits.
+# Review the generated file in src/prompture_hub/migrations/versions/ —
+# autogenerate is a hint, not a substitute for reading the SQL it emits.
 ```
+</details>
 
 If you have an old SQLite from before Alembic was introduced and it
 already has tables but no `alembic_version` row, the cleanest path is to
