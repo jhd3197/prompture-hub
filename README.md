@@ -30,7 +30,7 @@ The untrusted app never sees `OPENAI_API_KEY` (or any other real provider secret
 
 ## Status
 
-**v0.0.1** — solo / localhost / SQLite, [published on PyPI](https://pypi.org/project/prompture-hub/). The architecture (auth, key model, storage) is designed to extend to multi-user and public deployment later without rewriting the v0.x surface.
+**v0.0.2** — solo / localhost / SQLite, [published on PyPI](https://pypi.org/project/prompture-hub/). The architecture (auth, key model, storage) is designed to extend to multi-user and public deployment later without rewriting the v0.x surface.
 
 ## Install
 

@@ -4,7 +4,7 @@ build-backend = "hatchling.build"
 
 [project]
 name = "prompture-hub"
-version = "0.0.1"
+version = "0.0.2"
 description = "Self-hosted gateway over Prompture's multi-provider LLM driver registry. Hub-issued scoped keys map to real provider keys server-side."
 readme = "README.md"
 requires-python = ">=3.10"

@@ -5,6 +5,7 @@ from __future__ import annotations
 import logging
 import os
 from contextlib import asynccontextmanager
+from importlib.metadata import PackageNotFoundError, version as _pkg_version
 
 from fastapi import FastAPI, HTTPException, Request, status
 from fastapi.responses import FileResponse, RedirectResponse
@@ -26,6 +27,11 @@ from .storage.db import init_db
 
 logger = logging.getLogger("prompture_hub")
 
+try:
+    __version__ = _pkg_version("prompture-hub")
+except PackageNotFoundError:  # not installed (e.g. running from a raw checkout)
+    __version__ = "0.0.0"
+
 
 @asynccontextmanager
 async def lifespan(app: FastAPI):
@@ -42,7 +48,7 @@ def create_app() -> FastAPI:
             "Self-hosted gateway over Prompture's multi-provider LLM driver registry. "
             "Hub-issued scoped keys map to real provider keys server-side."
         ),
-        version="0.0.1",
+        version=__version__,
         lifespan=lifespan,
     )
 

@@ -28,6 +28,26 @@ jobs:
         with:
           fetch-depth: 0
 
+      # The tag is the source of truth for the published version. Write it into
+      # pyproject.toml before building so `v1.2.3` publishes 1.2.3 — without this
+      # every release would ship the static version in pyproject and PyPI would
+      # reject the duplicate.
+      - name: Set version from tag
+        run: |
+          VERSION="${GITHUB_REF_NAME#v}"
+          echo "Releasing version: $VERSION"
+          python - "$VERSION" <<'PY'
+          import pathlib, re, sys
+          version = sys.argv[1]
+          path = pathlib.Path("pyproject.toml")
+          text = path.read_text()
+          text, n = re.subn(r'(?m)^version = ".*"$', f'version = "{version}"', text, count=1)
+          if n != 1:
+              sys.exit("could not find a 'version = ...' line in pyproject.toml")
+          path.write_text(text)
+          print(f"pyproject.toml version set to {version}")
+          PY
+
       - name: Setup Node 20
         uses: actions/setup-node@v4
         with:
