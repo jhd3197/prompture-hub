@@ -1,4 +1,17 @@
-# prompture-hub
+<p align="center">
+  <h1 align="center">prompture-hub</h1>
+  <p align="center">A self-hosted LLM gateway. Hold the real provider keys server-side, hand out scoped hub keys, meter every call.</p>
+</p>
+
+<p align="center">
+  <a href="https://opensource.org/licenses/MIT"><img src="https://img.shields.io/badge/License-MIT-blue.svg" alt="License: MIT"></a>
+  <a href="https://www.python.org/downloads/"><img src="https://img.shields.io/badge/python-3.10+-blue.svg" alt="Python 3.10+"></a>
+  <a href="https://fastapi.tiangolo.com/"><img src="https://img.shields.io/badge/FastAPI-009688?logo=fastapi&logoColor=white" alt="FastAPI"></a>
+  <a href="https://github.com/jhd3197/prompture"><img src="https://img.shields.io/badge/built%20with-Prompture-8A2BE2" alt="Built with Prompture"></a>
+  <a href="https://github.com/jhd3197/prompture-hub"><img src="https://img.shields.io/github/stars/jhd3197/prompture-hub?style=social" alt="GitHub stars"></a>
+</p>
+
+---
 
 Self-hosted gateway over [Prompture](https://github.com/jhd3197/prompture)'s multi-provider LLM driver registry. Think OpenRouter, except *you* control the keys, the metering, and the trust boundary.
 
@@ -17,26 +30,52 @@ The untrusted app never sees `OPENAI_API_KEY` (or any other real provider secret
 
 ## Status
 
-**v0.0.1 (scaffold)** — solo / localhost / SQLite. The architecture (auth, key model, storage) is designed to extend to multi-user and public deployment later without rewriting v0.1 surface.
+**v0.0.1** — solo / localhost / SQLite, [published on PyPI](https://pypi.org/project/prompture-hub/). The architecture (auth, key model, storage) is designed to extend to multi-user and public deployment later without rewriting the v0.x surface.
 
-## Quickstart
+## Install
+
+```bash
+pip install prompture-hub
+```
+
+The dashboard UI ships **prebuilt inside the package** — no Node, no npm, no checkout required. (Prefer an isolated install? `pipx install prompture-hub`.)
+
+Point it at one provider key and launch:
+
+```bash
+# create a minimal .env in your working directory
+python -c "import secrets; print('HUB_ADMIN_TOKEN=' + secrets.token_urlsafe(32))" >> .env
+echo "OPENAI_API_KEY=sk-..." >> .env                     # any provider Prompture supports
+echo "OLLAMA_BASE_URL=http://localhost:11434" >> .env    # local models work too
+
+prompture-hub
+```
+
+Open **http://localhost:1984/** — you'll land on the dashboard at `/app/`. See [`.env.example`](.env.example) for every setting (OAuth login, spend caps, all provider keys).
+
+> [!IMPORTANT]
+> **Run it natively, not in a container.** Because `prompture-hub` runs as a normal
+> process on your host, it can reach model servers on `localhost` — Ollama (`:11434`),
+> LM Studio (`:1234`), and friends. A Dockerized hub can't see those host-local
+> servers without extra networking (see [Run in a container](#run-in-a-container-secondary)).
+
+<details>
+<summary><b>Run from source (for development)</b></summary>
+
+You only need this if you're hacking on the hub itself — it requires Node to build the dashboard.
 
 ```bash
 git clone https://github.com/jhd3197/prompture-hub
 cd prompture-hub
 pip install -e ".[dev]"
+cp .env.example .env            # fill in HUB_ADMIN_TOKEN + provider keys
 
-cp .env.example .env
-# Fill in: HUB_ADMIN_TOKEN, plus whatever provider keys you want available
-# (OPENAI_API_KEY, ANTHROPIC_API_KEY, OLLAMA_BASE_URL, ...)
-
-# Build the React dashboard once (or use `npm run dev` for hot reload):
-cd frontend && npm install && npm run build && cd ..
-
-uvicorn prompture_hub.main:app --reload
+cd frontend && npm install && npm run build && cd ..   # build the dashboard
+uvicorn prompture_hub.main:app --reload                # http://localhost:1984
 ```
 
-Open `http://localhost:1984/` — you'll be redirected to the SPA at `/app/`.
+For live frontend reload, run `npm run dev` inside `frontend/` (it proxies to the API on :1984) instead of the one-off build.
+</details>
 
 Then create a scoped key for an untrusted app:
 
@@ -139,7 +178,13 @@ The HTML dashboard at `/` is gated behind OAuth login when configured. Programma
 
 **Fallback (dev-only):** if `HUB_SESSION_SECRET` is empty *or* neither OAuth provider is configured, login is disabled and `require_user` falls back to localhost-open mode — convenient for solo dev, **never** safe for a public deployment. Always set a session secret + provider + allowlist before exposing the hub.
 
-## Run on Linux with Docker
+## Run in a container (secondary)
+
+> [!WARNING]
+> A containerized hub **cannot reach model servers on your host's `localhost`**
+> (Ollama, LM Studio, etc.). Use the native `pip install` above if you rely on
+> local models. Containers are best when you only call **remote** providers
+> (OpenAI, Anthropic, Groq, …) or run your model server in another container.
 
 ```bash
 cp .env.example .env
@@ -150,12 +195,12 @@ docker compose logs -f hub
 curl http://localhost:1984/health
 ```
 
-The container:
+The container runs as non-root `hub` (uid 10001), persists SQLite at `/data/prompture_hub.db` via the `hub_data` volume, binds `0.0.0.0:1984`, and has a `/health` healthcheck.
 
-- Runs as non-root user `hub` (uid 10001)
-- Persists SQLite at `/data/prompture_hub.db` via the `hub_data` named volume
-- Binds `0.0.0.0:1984` inside the container (compose maps to host `1984`)
-- Has a `/health` healthcheck (curl-based, 30s interval)
+**Reaching host-local model servers from the container:**
+
+- **Linux:** add `network_mode: host` to the `hub` service so it shares the host's localhost, or
+- **macOS / Windows / Linux:** point provider base URLs at the host gateway, e.g. `OLLAMA_BASE_URL=http://host.docker.internal:11434`.
 
 For a public deployment, put it behind nginx/Caddy with TLS and rate limits — don't expose port 1984 to the internet directly.
 
