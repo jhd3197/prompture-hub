@@ -20,6 +20,22 @@ def _utcnow() -> datetime:
     return datetime.now(timezone.utc)
 
 
+def iso_utc(dt: Optional[datetime]) -> Optional[str]:
+    """Serialize a datetime as UTC ISO-8601 with an explicit offset.
+
+    SQLite does not preserve tzinfo, so datetimes read back from the DB are
+    naive even though we always store UTC. A bare ``.isoformat()`` on a naive
+    value emits no offset, which browsers (and any client) parse as *local*
+    time — shifting timestamps by the viewer's UTC offset. Assume UTC when
+    tzinfo is missing, then emit with ``+00:00`` so the value is unambiguous.
+    """
+    if dt is None:
+        return None
+    if dt.tzinfo is None:
+        dt = dt.replace(tzinfo=timezone.utc)
+    return dt.astimezone(timezone.utc).isoformat()
+
+
 class HubKey(SQLModel, table=True):
     """A hub-issued scoped key. Plaintext shown once; only hash is stored."""
 

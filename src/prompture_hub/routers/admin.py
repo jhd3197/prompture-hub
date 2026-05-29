@@ -15,7 +15,7 @@ from sqlmodel import select
 
 from ..auth import generate_key, require_admin
 from ..storage.db import get_session
-from ..storage.models import HubKey, UsageRecord, User
+from ..storage.models import HubKey, UsageRecord, User, iso_utc
 
 router = APIRouter(dependencies=[Depends(require_admin)])
 
@@ -110,8 +110,8 @@ def list_keys() -> list[dict[str, Any]]:
                 "daily_spend_cap_usd": r.daily_spend_cap_usd,
                 "spend_period": r.spend_period,
                 "rate_limit_per_min": r.rate_limit_per_min,
-                "created_at": r.created_at.isoformat(),
-                "revoked_at": r.revoked_at.isoformat() if r.revoked_at else None,
+                "created_at": iso_utc(r.created_at),
+                "revoked_at": iso_utc(r.revoked_at),
                 "active": r.revoked_at is None,
                 "user_id": r.user_id,
             }
@@ -155,7 +155,7 @@ def list_usage(
                 "cost_usd": r.cost_usd,
                 "latency_ms": r.latency_ms,
                 "status": r.status,
-                "timestamp": r.timestamp.isoformat(),
+                "timestamp": iso_utc(r.timestamp),
             }
             for r in session.exec(stmt).all()
         ]

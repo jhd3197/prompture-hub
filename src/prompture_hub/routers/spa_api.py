@@ -18,7 +18,7 @@ from sqlmodel import select
 from ..auth import generate_key, require_user
 from ..settings import get_settings
 from ..storage.db import get_session
-from ..storage.models import Conversation, HubKey, Message, UsageRecord, User
+from ..storage.models import Conversation, HubKey, Message, UsageRecord, User, iso_utc
 from .coding_agents import RunAgentRequest
 
 router = APIRouter()
@@ -36,8 +36,8 @@ def _serialize_key(k: HubKey) -> dict[str, Any]:
         "daily_spend_cap_usd": k.daily_spend_cap_usd,
         "spend_period": getattr(k, "spend_period", "day") or "day",
         "rate_limit_per_min": k.rate_limit_per_min,
-        "created_at": k.created_at.isoformat(),
-        "revoked_at": k.revoked_at.isoformat() if k.revoked_at else None,
+        "created_at": iso_utc(k.created_at),
+        "revoked_at": iso_utc(k.revoked_at),
         "active": k.revoked_at is None,
     }
 
@@ -54,7 +54,7 @@ def _serialize_usage(u: UsageRecord) -> dict[str, Any]:
         "cost_usd": u.cost_usd,
         "latency_ms": u.latency_ms,
         "status": u.status,
-        "timestamp": u.timestamp.isoformat(),
+        "timestamp": iso_utc(u.timestamp),
     }
 
 
@@ -266,8 +266,8 @@ def list_conversations(
                 "title": c.title,
                 "model": c.model,
                 "key_id": c.key_id,
-                "created_at": c.created_at.isoformat(),
-                "updated_at": c.updated_at.isoformat(),
+                "created_at": iso_utc(c.created_at),
+                "updated_at": iso_utc(c.updated_at),
                 "message_count": msg_count,
             })
         return out
@@ -296,8 +296,8 @@ def get_conversation(
         "model": conv.model,
         "key_id": conv.key_id,
         "meta": conv.meta or {},
-        "created_at": conv.created_at.isoformat(),
-        "updated_at": conv.updated_at.isoformat(),
+        "created_at": iso_utc(conv.created_at),
+        "updated_at": iso_utc(conv.updated_at),
         "totals": {
             "prompt_tokens": total_prompt,
             "completion_tokens": total_completion,
@@ -315,7 +315,7 @@ def get_conversation(
                 "completion_tokens": m.completion_tokens,
                 "total_tokens": m.total_tokens,
                 "cost_usd": m.cost_usd,
-                "created_at": m.created_at.isoformat(),
+                "created_at": iso_utc(m.created_at),
             }
             for m in msgs
         ],

@@ -24,7 +24,7 @@ from sqlmodel import select
 
 from ..auth import require_hub_key
 from ..storage.db import get_session
-from ..storage.models import Conversation, HubKey, Message
+from ..storage.models import Conversation, HubKey, Message, iso_utc
 
 router = APIRouter()
 
@@ -115,8 +115,8 @@ def create_conversation(
             id=conv.id,
             title=conv.title,
             model=conv.model,
-            created_at=conv.created_at.isoformat(),
-            updated_at=conv.updated_at.isoformat(),
+            created_at=iso_utc(conv.created_at),
+            updated_at=iso_utc(conv.updated_at),
             message_count=msg_count,
         )
 
@@ -146,8 +146,8 @@ def list_conversations(
                     id=c.id,
                     title=c.title,
                     model=c.model,
-                    created_at=c.created_at.isoformat(),
-                    updated_at=c.updated_at.isoformat(),
+                    created_at=iso_utc(c.created_at),
+                    updated_at=iso_utc(c.updated_at),
                     message_count=count,
                 )
             )
@@ -172,8 +172,8 @@ def get_conversation(
             title=conv.title,
             model=conv.model,
             meta=conv.meta or {},
-            created_at=conv.created_at.isoformat(),
-            updated_at=conv.updated_at.isoformat(),
+            created_at=iso_utc(conv.created_at),
+            updated_at=iso_utc(conv.updated_at),
             messages=[
                 MessageOut(
                     id=m.id,
@@ -184,7 +184,7 @@ def get_conversation(
                     completion_tokens=m.completion_tokens,
                     total_tokens=m.total_tokens,
                     cost_usd=m.cost_usd,
-                    created_at=m.created_at.isoformat(),
+                    created_at=iso_utc(m.created_at),
                 )
                 for m in msgs
             ],
