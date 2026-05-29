@@ -74,6 +74,7 @@ def init_db() -> None:
 
     from alembic import command
     from alembic.config import Config
+    from sqlalchemy import inspect
 
     cfg = Config()
     cfg.set_main_option("script_location", str(_MIGRATIONS_DIR))
@@ -81,7 +82,18 @@ def init_db() -> None:
 
     # Ensure the engine is built against the same path before running, so
     # connection-pool behaviour matches.
-    get_engine()
+    engine = get_engine()
+
+    # Adopt a pre-Alembic database without re-running the initial migration over
+    # existing tables. An older build created the schema with create_all and left
+    # no alembic_version row; if we see the schema but no version table, stamp it
+    # at head (that schema matches the latest models) before upgrading. Fresh
+    # databases have no tables and migrate normally from base.
+    tables = set(inspect(engine).get_table_names())
+    if "alembic_version" not in tables and "hubkey" in tables:
+        logger.info("Adopting pre-Alembic database: stamping schema at head.")
+        command.stamp(cfg, "head")
+
     command.upgrade(cfg, "head")
 
 
