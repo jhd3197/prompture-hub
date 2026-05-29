@@ -67,6 +67,27 @@ class HubSettings(BaseSettings):
             if p.strip()
         }
 
+    # --- coding agent execution ---
+    agent_workspace: str = Field(
+        default="./agent-workspace",
+        description=(
+            "Directory under which coding-agent runs must execute. Requests "
+            "specifying a cwd outside this tree are refused. Created on demand."
+        ),
+    )
+    allow_agent_yolo: bool = Field(
+        default=False,
+        description=(
+            "When False, /v1/coding-agents/run rejects approval_mode='yolo'. "
+            "Set true only if you accept that the agent can do anything inside "
+            "the workspace without prompting."
+        ),
+    )
+    agent_default_timeout: int = Field(
+        default=600,
+        description="Per-run subprocess timeout in seconds.",
+    )
+
     @property
     def allowed_email_set(self) -> set[str]:
         return {e.strip().lower() for e in self.allowed_emails.split(",") if e.strip()}

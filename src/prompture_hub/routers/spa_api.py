@@ -19,6 +19,7 @@ from ..auth import generate_key, require_user
 from ..settings import get_settings
 from ..storage.db import get_session
 from ..storage.models import Conversation, HubKey, Message, UsageRecord, User
+from .coding_agents import RunAgentRequest
 
 router = APIRouter()
 
@@ -334,6 +335,24 @@ def delete_conversation(
 # ---------------------------------------------------------------------------
 # Discovery: agents + non-LLM modalities.
 # ---------------------------------------------------------------------------
+
+
+@router.post("/agents/run")
+def run_agent_console(
+    body: RunAgentRequest,
+    user: User = Depends(require_user),
+) -> dict[str, Any]:
+    """Dashboard / operator-console variant of POST /v1/coding-agents/run.
+
+    Auth is the session cookie (operator already passed allowlist + OAuth);
+    no quota check and no UsageRecord row, since console runs are part of
+    the operator's own work — they shouldn't count against any hub key's
+    budget or appear on the dashboard's metering feed.
+    """
+    from .coding_agents import execute_run as _execute_run
+
+    response, *_ = _execute_run(body)
+    return response
 
 
 @router.get("/agents")

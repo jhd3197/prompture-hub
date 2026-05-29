@@ -1,6 +1,8 @@
+import { useState } from "react";
 import { CopyButton } from "./CopyButton";
+import { RunAgentModal } from "./RunAgentModal";
 import {
-  IconAlert, IconCheck, IconRefresh, IconTerminal, IconX,
+  IconAlert, IconBolt, IconCheck, IconRefresh, IconTerminal, IconX,
 } from "../icons";
 import type { AgentInfo } from "../types";
 
@@ -50,6 +52,7 @@ function variant(a: AgentInfo): "available" | "broken" | "missing" {
 export function AgentCard({ agent }: { agent: AgentInfo }) {
   const kind = variant(agent);
   const install = installCommand(agent);
+  const [running, setRunning] = useState(false);
 
   return (
     <div className={`agent-card ${kind} fade-in`}>
@@ -113,11 +116,27 @@ export function AgentCard({ agent }: { agent: AgentInfo }) {
             <IconRefresh style={{ width: 13, height: 13 }} />Re-verify
           </button>
         ) : (
-          <span className="approve-pill" style={{ marginLeft: "auto" }}>
-            ready to run
-          </span>
+          <>
+            <button
+              className="btn btn-sm btn-primary"
+              onClick={() => setRunning(true)}
+            >
+              <IconBolt style={{ width: 13, height: 13 }} />Run task
+            </button>
+            <span
+              className="approve-pill"
+              style={{ marginLeft: "auto" }}
+              title="The hub will execute this binary on POST /v1/coding-agents/run"
+            >
+              /v1/coding-agents/run
+            </span>
+          </>
         )}
       </div>
+
+      {running && (
+        <RunAgentModal agent={agent} onClose={() => setRunning(false)} />
+      )}
     </div>
   );
 }

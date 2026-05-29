@@ -54,6 +54,33 @@ export const api = {
   models: () => request<ModelsResponse>("/api/models"),
   agents: () => request<AgentsResponse>("/api/agents"),
   modalities: () => request<ModalitiesResponse>("/api/modalities"),
+  runAgent: (body: {
+    agent: string;
+    task: string;
+    approval_mode?: string;
+    model?: string | null;
+    extra_args?: string[];
+    output_format?: string;
+    session_id?: string | null;
+    cwd?: string | null;
+  }) => request<{
+    agent: string;
+    command: string[];
+    cwd: string;
+    returncode: number;
+    duration_seconds: number;
+    output: string;
+    events: Array<Record<string, unknown>>;
+    usage: {
+      prompt_tokens: number;
+      completion_tokens: number;
+      total_tokens: number;
+      cost_usd: number;
+    };
+  }>("/api/agents/run", {
+    method: "POST",
+    body: JSON.stringify(body),
+  }),
   listConversations: () =>
     request<ConversationSummary[]>("/api/conversations"),
   getConversation: (id: string) =>
