@@ -5,6 +5,21 @@ import {
 } from "../icons";
 import type { AgentInfo } from "../types";
 import { Modal } from "./Modal";
+import { ModelSelect } from "./ModelSelect";
+
+// Most coding-agent CLIs only accept models from a single provider. The
+// dropdown filters by that provider when we know it. Aider / OpenCode /
+// Cursor accept many providers, so they get the full list.
+const AGENT_PROVIDER_HINT: Record<string, string | undefined> = {
+  claude: "claude",      // Anthropic via Claude CLI
+  codex: "openai",
+  gemini: "google",
+  qwen: undefined,
+  aider: undefined,
+  opencode: undefined,
+  "cursor-agent": undefined,
+  crush: undefined,
+};
 
 type ApprovalMode = "default" | "auto" | "yolo";
 type OutputFormat = "text" | "json";
@@ -340,14 +355,20 @@ export function RunAgentModal({
           <div className="grid-2">
             <div className="field">
               <label htmlFor="agent-model">Model override <span className="faint" style={{ fontWeight: 500 }}>(optional)</span></label>
-              <input
+              <ModelSelect
                 id="agent-model"
-                className="input mono"
                 value={model}
-                onChange={e => setModel(e.target.value)}
+                onChange={setModel}
                 placeholder="claude-sonnet-4-6"
+                providerFilter={AGENT_PROVIDER_HINT[agent.id]}
+                bareModelIds
               />
-              <span className="hint">CLI-dependent. Leave blank to use the agent's default.</span>
+              <span className="hint">
+                CLI-dependent. Leave blank to use the agent's default.
+                {AGENT_PROVIDER_HINT[agent.id] && (
+                  <> Suggestions filtered to <code className="mono">{AGENT_PROVIDER_HINT[agent.id]}</code> models.</>
+                )}
+              </span>
             </div>
             <div className="field">
               <label htmlFor="agent-output">Output format</label>

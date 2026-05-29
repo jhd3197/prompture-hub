@@ -3,6 +3,7 @@ import { ApiError, api } from "../api";
 import { CopyButton } from "../components/CopyButton";
 import { EmptyState } from "../components/EmptyState";
 import { KeyStatus } from "../components/KeyStatus";
+import { ModelMultiSelect } from "../components/ModelMultiSelect";
 import { Modal } from "../components/Modal";
 import { useToast } from "../components/Toast";
 import {
@@ -17,14 +18,13 @@ function CreateKeyModal({
   onCreated: (k: CreatedKey) => void;
 }) {
   const [name, setName] = useState("");
-  const [models, setModels] = useState("");
+  const [modelList, setModelList] = useState<string[]>([]);
   const [cap, setCap] = useState("1");
   const [rate, setRate] = useState("60");
   const [submitting, setSubmitting] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const toast = useToast();
 
-  const modelList = models.split(",").map(s => s.trim()).filter(Boolean);
   const nameOk = /^[a-z0-9][a-z0-9-_]{0,99}$/i.test(name);
   const valid = nameOk;
 
@@ -88,18 +88,18 @@ function CreateKeyModal({
 
       <div className="field">
         <label htmlFor="k-models">
-          Allowed models <span className="faint" style={{ fontWeight: 500 }}>(comma-separated · empty = any)</span>
+          Allowed models <span className="faint" style={{ fontWeight: 500 }}>(empty = any)</span>
         </label>
-        <textarea
-          id="k-models" className="textarea"
-          placeholder="openai/gpt-4o, claude/claude-sonnet-4-6, ollama/llama3.1:8b"
-          value={models} onChange={e => setModels(e.target.value)}
+        <ModelMultiSelect
+          value={modelList}
+          onChange={setModelList}
+          placeholder="openai/gpt-4o"
         />
-        {modelList.length > 0 && (
-          <span className="hint">
-            This key will be able to call <strong style={{ color: "var(--text)" }}>{modelList.length}</strong> model{modelList.length > 1 ? "s" : ""}.
-          </span>
-        )}
+        <span className="hint">
+          {modelList.length === 0
+            ? "Pick from the dropdown, or type a model id and press Enter. Leave empty to allow any model."
+            : <>This key will be able to call <strong style={{ color: "var(--text)" }}>{modelList.length}</strong> model{modelList.length > 1 ? "s" : ""}.</>}
+        </span>
       </div>
 
       <div className="grid-2">
