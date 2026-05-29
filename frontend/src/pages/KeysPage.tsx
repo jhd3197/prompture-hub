@@ -1,4 +1,5 @@
 import { useEffect, useState } from "react";
+import { Link, useLocation, useNavigate } from "react-router-dom";
 import { ApiError, api } from "../api";
 import { CopyButton } from "../components/CopyButton";
 import { EmptyState } from "../components/EmptyState";
@@ -401,10 +402,23 @@ export function KeysPage() {
   const [keys, setKeys] = useState<HubKey[]>([]);
   const [loading, setLoading] = useState(true);
   const [loadError, setLoadError] = useState<string | null>(null);
-  const [showCreate, setShowCreate] = useState(false);
   const [reveal, setReveal] = useState<CreatedKey | null>(null);
   const [revoking, setRevoking] = useState<HubKey | null>(null);
   const toast = useToast();
+  const location = useLocation();
+  const navigate = useNavigate();
+
+  // The CreateKeyPage hands the plaintext off via router state when it
+  // redirects here. Pop the reveal modal once and clear the state so a
+  // browser refresh doesn't re-show it.
+  useEffect(() => {
+    const st = location.state as { newKey?: CreatedKey } | null;
+    if (st?.newKey) {
+      setReveal(st.newKey);
+      navigate(location.pathname, { replace: true, state: null });
+    }
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, []);
 
   const refresh = async () => {
     setLoading(true);
@@ -432,11 +446,12 @@ export function KeysPage() {
     }
   };
 
-  const handleCreated = async (k: CreatedKey) => {
-    setShowCreate(false);
-    setReveal(k);
-    await refresh();
-  };
+  // Re-fetch keys once the reveal modal closes so the new row appears
+  // in the table.
+  useEffect(() => {
+    if (reveal) refresh();
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [reveal]);
 
   const active = keys.filter(k => k.active);
 
@@ -450,9 +465,9 @@ export function KeysPage() {
             and you can revoke any one instantly.
           </p>
         </div>
-        <button className="btn btn-primary" onClick={() => setShowCreate(true)}>
+        <Link to="/keys/new" className="btn btn-primary">
           <IconPlus />New hub key
-        </button>
+        </Link>
       </div>
 
       <div className="card">
@@ -472,9 +487,9 @@ export function KeysPage() {
             icon={<IconKey />}
             title="No hub keys yet"
             action={
-              <button className="btn btn-primary" onClick={() => setShowCreate(true)}>
+              <Link to="/keys/new" className="btn btn-primary">
                 <IconPlus />Create your first key
-              </button>
+              </Link>
             }
           >
             A hub key is a disposable <code className="mono">ph_…</code> credential you hand to an app.
@@ -507,7 +522,6 @@ export function KeysPage() {
         Secrets are stored as hashes. The plaintext is shown once at creation — after that, only the prefix is recoverable.
       </p>
 
-      {showCreate && <CreateKeyModal onClose={() => setShowCreate(false)} onCreated={handleCreated} />}
       {reveal && <RevealKeyModal created={reveal} onClose={() => setReveal(null)} />}
       {revoking && (
         <RevokeKeyModal
