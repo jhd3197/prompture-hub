@@ -1,6 +1,6 @@
 import type {
-  AuthProviders, ConversationDetail, ConversationSummary, CreatedKey,
-  CurrentUser, HubKey, ModelsResponse, Overview,
+  AgentsResponse, AuthProviders, ConversationDetail, ConversationSummary,
+  CreatedKey, CurrentUser, HubKey, ModalitiesResponse, ModelsResponse, Overview,
 } from "./types";
 
 export class ApiError extends Error {
@@ -52,6 +52,8 @@ export const api = {
   revokeKey: (id: number) =>
     request<void>(`/api/keys/${id}/revoke`, { method: "POST" }),
   models: () => request<ModelsResponse>("/api/models"),
+  agents: () => request<AgentsResponse>("/api/agents"),
+  modalities: () => request<ModalitiesResponse>("/api/modalities"),
   listConversations: () =>
     request<ConversationSummary[]>("/api/conversations"),
   getConversation: (id: string) =>

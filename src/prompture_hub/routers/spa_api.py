@@ -332,6 +332,128 @@ def delete_conversation(
 
 
 # ---------------------------------------------------------------------------
+# Discovery: agents + non-LLM modalities.
+# ---------------------------------------------------------------------------
+
+
+@router.get("/agents")
+def agents() -> dict[str, Any]:
+    """Coding agent CLIs discovered on the host.
+
+    Joins :func:`get_available_coding_agents` (runtime availability) with
+    :data:`CODING_AGENT_SPECS` (static capabilities + install hint) so the
+    UI can render "install this" cards alongside ready-to-run ones.
+    """
+    discovery_error: str | None = None
+    try:
+        from prompture.infra.coding_agent_specs import CODING_AGENT_SPECS
+        from prompture.infra.discovery import get_available_coding_agents
+    except Exception as exc:  # noqa: BLE001
+        return {"agents": [], "discovery_error": str(exc)}
+
+    try:
+        infos = get_available_coding_agents(include_unavailable=True)
+    except Exception as exc:  # noqa: BLE001
+        return {"agents": [], "discovery_error": str(exc)}
+
+    out: list[dict[str, Any]] = []
+    for info in infos:
+        spec = CODING_AGENT_SPECS.get(info.id)
+        out.append({
+            "id": info.id,
+            "name": info.name,
+            "available": info.available,
+            "binary": info.binary,
+            "source": info.source,
+            "custom_path": info.custom_path,
+            "healthy": info.healthy,
+            "error": info.error,
+            "capabilities": {
+                "tool_use": bool(spec and spec.supports_tool_use),
+                "structured_output": bool(spec and spec.supports_structured_output),
+                "questions": bool(spec and spec.supports_questions),
+                "session_resume": bool(spec and spec.supports_session_resume),
+            },
+            "npm_packages": list(spec.npm_packages) if spec else [],
+        })
+    return {"agents": out, "discovery_error": discovery_error}
+
+
+def _grouped_models(
+    discover_fn,
+) -> tuple[list[dict[str, Any]], int, str | None]:
+    """Helper: run a discovery function, group ``provider/model`` strings."""
+    err: str | None = None
+    names: list[str] = []
+    try:
+        names = list(discover_fn())
+    except Exception as exc:  # noqa: BLE001
+        err = str(exc)
+
+    by_provider: dict[str, list[str]] = {}
+    for n in names:
+        if "/" in n:
+            provider, model = n.split("/", 1)
+        else:
+            provider, model = "unknown", n
+        by_provider.setdefault(provider, []).append(model)
+    for ms in by_provider.values():
+        ms.sort()
+
+    try:
+        from prompture.drivers import get_provider_brand, icon_url
+    except ImportError:  # pragma: no cover
+        get_provider_brand = lambda _: None  # noqa: E731
+        icon_url = lambda _: None  # noqa: E731
+
+    groups: list[dict[str, Any]] = []
+    for provider, ms in sorted(by_provider.items()):
+        brand = get_provider_brand(provider)
+        groups.append({
+            "provider": provider,
+            "models": ms,
+            "display_name": brand.display_name if brand else None,
+            "icon_url": icon_url(brand),
+            "brand_color": brand.brand_color if brand else None,
+            "is_local": brand.is_local if brand else False,
+        })
+    return groups, len(names), err
+
+
+@router.get("/modalities")
+def modalities() -> dict[str, Any]:
+    """Per-modality discovery: image-gen, video-gen, TTS, STT, embeddings,
+    rerank, moderation. Each shape mirrors ``/api/models`` so the same
+    React row component renders all of them."""
+
+    # Import lazily so older Prompture installs without a given helper
+    # degrade to an empty list rather than crashing the whole response.
+    def _safe(fn_name: str):
+        try:
+            from prompture.infra import discovery as d
+            return getattr(d, fn_name)
+        except Exception:  # noqa: BLE001
+            return None
+
+    def _build(label: str, fn_name: str, **kwargs) -> dict[str, Any]:
+        fn = _safe(fn_name)
+        if fn is None:
+            return {"label": label, "groups": [], "total": 0, "discovery_error": None}
+        groups, total, err = _grouped_models(lambda: fn(**kwargs))
+        return {"label": label, "groups": groups, "total": total, "discovery_error": err}
+
+    return {
+        "image_gen": _build("Image generation", "get_available_image_gen_models"),
+        "video_gen": _build("Video generation", "get_available_video_gen_models"),
+        "tts": _build("Text-to-speech", "get_available_audio_models", modality="tts"),
+        "stt": _build("Speech-to-text", "get_available_audio_models", modality="stt"),
+        "embeddings": _build("Embeddings", "get_available_embedding_models"),
+        "rerank": _build("Rerank", "get_available_rerank_models"),
+        "moderation": _build("Moderation", "get_available_moderation_models"),
+    }
+
+
+# ---------------------------------------------------------------------------
 
 
 @router.get("/models")

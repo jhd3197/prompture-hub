@@ -55,6 +55,48 @@ export interface ModelsResponse {
   discovery_error: string | null;
 }
 
+export interface AgentCapabilities {
+  tool_use: boolean;
+  structured_output: boolean;
+  questions: boolean;
+  session_resume: boolean;
+}
+
+export interface AgentInfo {
+  id: string;
+  name: string;
+  available: boolean;
+  binary: string;
+  source: string | null;
+  custom_path: boolean;
+  healthy: boolean | null;
+  error: string | null;
+  capabilities: AgentCapabilities;
+  npm_packages: string[];
+}
+
+export interface AgentsResponse {
+  agents: AgentInfo[];
+  discovery_error: string | null;
+}
+
+export interface ModalitySection {
+  label: string;
+  groups: ProviderGroup[];
+  total: number;
+  discovery_error: string | null;
+}
+
+export interface ModalitiesResponse {
+  image_gen: ModalitySection;
+  video_gen: ModalitySection;
+  tts: ModalitySection;
+  stt: ModalitySection;
+  embeddings: ModalitySection;
+  rerank: ModalitySection;
+  moderation: ModalitySection;
+}
+
 export interface AuthProviders {
   google: boolean;
   github: boolean;

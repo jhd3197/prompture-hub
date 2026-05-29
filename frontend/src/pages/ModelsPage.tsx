@@ -1,13 +1,20 @@
 import { useEffect, useMemo, useState } from "react";
+import { useSearchParams } from "react-router-dom";
 import { api } from "../api";
+import { AgentCard } from "../components/AgentCard";
 import { EmptyState } from "../components/EmptyState";
 import { ProviderLogo } from "../components/ProviderLogo";
 import { SnippetModal } from "../components/SnippetModal";
 import {
   IconAlert, IconChevronRight, IconCopy, IconGrid, IconKey, IconLayers,
-  IconRefresh, IconRoute, IconSearch, IconX,
+  IconRefresh, IconRoute, IconSearch, IconTerminal, IconX,
 } from "../icons";
-import type { ModelsResponse, ProviderGroup } from "../types";
+import type {
+  AgentsResponse, ModalitiesResponse, ModalitySection,
+  ModelsResponse, ProviderGroup,
+} from "../types";
+
+type Tab = "models" | "agents" | "modalities";
 
 function RoutingExplain() {
   return (
@@ -133,7 +140,207 @@ function ProviderRow({
   );
 }
 
+// ---------------------------------------------------------------------------
+// Tab panels
+// ---------------------------------------------------------------------------
+
+function ModelsTab({
+  data, loading, query, onPick,
+}: {
+  data: ModelsResponse | null;
+  loading: boolean;
+  query: string;
+  onPick: (route: string) => void;
+}) {
+  if (loading && !data) return <div className="empty"><p>Discovering models…</p></div>;
+  if (data && data.groups.length === 0) {
+    return (
+      <EmptyState icon={<IconGrid />} title="No chat models discoverable">
+        Add a provider API key (e.g. <code className="mono">OPENAI_API_KEY</code>) to <code className="mono">.env</code> and restart the hub to light up its models here.
+      </EmptyState>
+    );
+  }
+  return (
+    <>
+      {data?.discovery_error && (
+        <div className="discovery-fail mb16" role="alert" style={{
+          borderRadius: "var(--r-md)",
+          border: "1px solid var(--warn)",
+          background: "var(--warn-soft)",
+        }}>
+          <IconAlert />
+          <span>Partial discovery error: <span className="mono">{data.discovery_error}</span></span>
+        </div>
+      )}
+      {data?.groups.map(g => (
+        <ProviderRow
+          key={g.provider}
+          group={g}
+          query={query}
+          forceOpen={!!query}
+          onPick={onPick}
+        />
+      ))}
+    </>
+  );
+}
+
+function AgentsTab() {
+  const [data, setData] = useState<AgentsResponse | null>(null);
+  const [error, setError] = useState<string | null>(null);
+  const [loading, setLoading] = useState(true);
+
+  const load = async () => {
+    setLoading(true);
+    try {
+      setData(await api.agents());
+      setError(null);
+    } catch (e) {
+      setError(String(e));
+    } finally {
+      setLoading(false);
+    }
+  };
+  useEffect(() => { load(); }, []);
+
+  if (loading && !data) return <div className="empty"><p>Discovering agents…</p></div>;
+  if (error) {
+    return (
+      <EmptyState icon={<IconAlert />} title="Couldn't discover agents">{error}</EmptyState>
+    );
+  }
+  if (!data || data.agents.length === 0) {
+    return (
+      <EmptyState icon={<IconTerminal />} title="No coding agents detected">
+        Install at least one supported CLI (Claude Code, Codex, Gemini, Qwen, Aider, OpenCode, Cursor Agent, Crush) and refresh.
+      </EmptyState>
+    );
+  }
+
+  const available = data.agents.filter(a => a.available).length;
+
+  return (
+    <>
+      <div className="card card-pad mb24" style={{
+        background: "var(--accent-softer)",
+        borderColor: "transparent",
+      }}>
+        <div className="row" style={{ gap: 12, alignItems: "flex-start" }}>
+          <span className="empty-ico" style={{
+            width: 38, height: 38, marginBottom: 0, borderRadius: 10,
+          }}>
+            <IconTerminal style={{ width: 19, height: 19 }} />
+          </span>
+          <div>
+            <div className="strong" style={{ fontWeight: 700, fontSize: 14.5 }}>
+              {available} of {data.agents.length} coding agents ready on this host
+            </div>
+            <div className="muted" style={{ fontSize: 13, marginTop: 3, maxWidth: "70ch" }}>
+              Prompture discovers terminal coding-agent CLIs on the operator's
+              machine. The cards below describe what each agent supports;
+              "Not installed" rows include the install command.
+            </div>
+          </div>
+        </div>
+      </div>
+
+      <div className="agent-grid">
+        {data.agents.map(a => <AgentCard key={a.id} agent={a} />)}
+      </div>
+    </>
+  );
+}
+
+function ModalitiesTab() {
+  const [data, setData] = useState<ModalitiesResponse | null>(null);
+  const [error, setError] = useState<string | null>(null);
+  const [loading, setLoading] = useState(true);
+  const [picked, setPicked] = useState<string | null>(null);
+
+  const load = async () => {
+    setLoading(true);
+    try {
+      setData(await api.modalities());
+      setError(null);
+    } catch (e) {
+      setError(String(e));
+    } finally {
+      setLoading(false);
+    }
+  };
+  useEffect(() => { load(); }, []);
+
+  if (loading && !data) return <div className="empty"><p>Discovering modalities…</p></div>;
+  if (error) {
+    return <EmptyState icon={<IconAlert />} title="Couldn't discover modalities">{error}</EmptyState>;
+  }
+  if (!data) return null;
+
+  const sections: Array<[string, ModalitySection]> = [
+    ["image_gen", data.image_gen],
+    ["video_gen", data.video_gen],
+    ["tts", data.tts],
+    ["stt", data.stt],
+    ["embeddings", data.embeddings],
+    ["rerank", data.rerank],
+    ["moderation", data.moderation],
+  ];
+
+  const populated = sections.filter(([, s]) => s.total > 0);
+
+  if (populated.length === 0) {
+    return (
+      <EmptyState icon={<IconLayers />} title="No specialised modalities configured">
+        Add API keys for image / video / audio / embedding / rerank /
+        moderation providers (e.g. <code className="mono">ELEVENLABS_API_KEY</code>,
+        {" "}<code className="mono">RUNWAY_API_KEY</code>) and restart.
+      </EmptyState>
+    );
+  }
+
+  return (
+    <>
+      {populated.map(([key, section]) => (
+        <div key={key} style={{ marginBottom: 28 }}>
+          <div className="row between" style={{ marginBottom: 10 }}>
+            <h2 className="section-title">{section.label}</h2>
+            <span className="faint" style={{ fontSize: 12.5 }}>
+              <strong className="mono tnum">{section.total}</strong> model{section.total !== 1 ? "s" : ""}
+              {" "}across <strong>{section.groups.length}</strong> provider{section.groups.length !== 1 ? "s" : ""}
+            </span>
+          </div>
+          {section.discovery_error && (
+            <div className="discovery-fail mb16" role="alert" style={{
+              borderRadius: "var(--r-md)",
+              border: "1px solid var(--warn)",
+              background: "var(--warn-soft)",
+            }}>
+              <IconAlert />
+              <span className="mono">{section.discovery_error}</span>
+            </div>
+          )}
+          {section.groups.map(g => (
+            <ProviderRow
+              key={`${key}-${g.provider}`}
+              group={g}
+              query=""
+              forceOpen={false}
+              onPick={setPicked}
+            />
+          ))}
+        </div>
+      ))}
+      {picked && <SnippetModal route={picked} onClose={() => setPicked(null)} />}
+    </>
+  );
+}
+
+// ---------------------------------------------------------------------------
+
 export function ModelsPage() {
+  const [params, setParams] = useSearchParams();
+  const tab = (params.get("tab") as Tab) || "models";
+
   const [data, setData] = useState<ModelsResponse | null>(null);
   const [error, setError] = useState<string | null>(null);
   const [loading, setLoading] = useState(true);
@@ -157,11 +364,20 @@ export function ModelsPage() {
   const totalModels = useMemo(() => data?.total ?? 0, [data]);
   const providerCount = useMemo(() => data?.groups.length ?? 0, [data]);
 
+  const setTab = (t: Tab) => {
+    setParams(p => {
+      const next = new URLSearchParams(p);
+      if (t === "models") next.delete("tab");
+      else next.set("tab", t);
+      return next;
+    });
+  };
+
   return (
     <div className="container">
       <div className="page-head">
         <div className="grow">
-          <h1 className="page-title">Models</h1>
+          <h1 className="page-title">Models &amp; agents</h1>
           <p className="page-sub">
             Everything the hub can route, addressed as{" "}
             <code className="mono" style={{
@@ -170,8 +386,9 @@ export function ModelsPage() {
               padding: "1px 6px",
               borderRadius: 4,
             }}>provider/model</code>.{" "}
-            <strong className="mono tnum">{totalModels}</strong> models across{" "}
-            <strong>{providerCount}</strong> providers.
+            <strong className="mono tnum">{totalModels}</strong> chat models across{" "}
+            <strong>{providerCount}</strong> providers, plus coding agents and
+            specialised modalities.
           </p>
         </div>
         <button className="btn" onClick={load}>
@@ -179,71 +396,74 @@ export function ModelsPage() {
         </button>
       </div>
 
-      <RoutingExplain />
-
-      <div className="toolbar mb24">
-        <div className="search">
-          <IconSearch />
-          <input
-            placeholder="Search by route or name…  e.g. openai/gpt-4o, claude, ollama"
-            value={query}
-            onChange={e => setQuery(e.target.value)}
-            aria-label="Search models"
-          />
-        </div>
-        {query && (
-          <button className="btn btn-sm btn-ghost" onClick={() => setQuery("")}>
-            <IconX />Clear
+      <div className="row mb24" style={{ gap: 10 }}>
+        <div className="seg">
+          <button
+            className={tab === "models" ? "on" : ""}
+            onClick={() => setTab("models")}
+          >
+            <IconGrid />Chat models
           </button>
-        )}
+          <button
+            className={tab === "agents" ? "on" : ""}
+            onClick={() => setTab("agents")}
+          >
+            <IconTerminal />Coding agents
+          </button>
+          <button
+            className={tab === "modalities" ? "on" : ""}
+            onClick={() => setTab("modalities")}
+          >
+            <IconLayers />Other modalities
+          </button>
+        </div>
       </div>
 
-      {error && (
-        <div className="discovery-fail mb16" role="alert" style={{
-          borderRadius: "var(--r-md)",
-          border: "1px solid var(--warn)",
-          background: "var(--warn-soft)",
-        }}>
-          <IconAlert />
-          <div>
-            <strong>Couldn't list models.</strong> {error}
-            <div className="mt8">
-              <button className="btn btn-sm" onClick={load}>
-                <IconRefresh style={{ width: 13, height: 13 }} />Retry
-              </button>
+      {tab === "models" && (
+        <>
+          <RoutingExplain />
+
+          <div className="toolbar mb16">
+            <div className="search">
+              <IconSearch />
+              <input
+                placeholder="Search by route or name…  e.g. openai/gpt-4o, claude, ollama"
+                value={query}
+                onChange={e => setQuery(e.target.value)}
+                aria-label="Search models"
+              />
             </div>
+            {query && (
+              <button className="btn btn-sm btn-ghost" onClick={() => setQuery("")}>
+                <IconX />Clear
+              </button>
+            )}
           </div>
-        </div>
+
+          {error && (
+            <div className="discovery-fail mb16" role="alert" style={{
+              borderRadius: "var(--r-md)",
+              border: "1px solid var(--warn)",
+              background: "var(--warn-soft)",
+            }}>
+              <IconAlert />
+              <div>
+                <strong>Couldn't list models.</strong> {error}
+                <div className="mt8">
+                  <button className="btn btn-sm" onClick={load}>
+                    <IconRefresh style={{ width: 13, height: 13 }} />Retry
+                  </button>
+                </div>
+              </div>
+            </div>
+          )}
+
+          <ModelsTab data={data} loading={loading} query={query} onPick={setPicked} />
+        </>
       )}
 
-      {data?.discovery_error && (
-        <div className="discovery-fail mb16" role="alert" style={{
-          borderRadius: "var(--r-md)",
-          border: "1px solid var(--warn)",
-          background: "var(--warn-soft)",
-        }}>
-          <IconAlert />
-          <span>Partial discovery error: <span className="mono">{data.discovery_error}</span></span>
-        </div>
-      )}
-
-      {loading && !data ? (
-        <div className="empty"><p>Discovering models…</p></div>
-      ) : data && data.groups.length === 0 ? (
-        <EmptyState icon={<IconGrid />} title="No models discoverable">
-          Add a provider API key (e.g. <code className="mono">OPENAI_API_KEY</code>) to <code className="mono">.env</code> and restart the hub to light up its models here.
-        </EmptyState>
-      ) : (
-        data?.groups.map(g => (
-          <ProviderRow
-            key={g.provider}
-            group={g}
-            query={query}
-            forceOpen={!!query}
-            onPick={setPicked}
-          />
-        ))
-      )}
+      {tab === "agents" && <AgentsTab />}
+      {tab === "modalities" && <ModalitiesTab />}
 
       {picked && <SnippetModal route={picked} onClose={() => setPicked(null)} />}
     </div>
