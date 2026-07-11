@@ -10,7 +10,7 @@ from __future__ import annotations
 from datetime import datetime, timedelta, timezone
 from typing import Any
 
-from fastapi import APIRouter, Depends, HTTPException, status
+from fastapi import APIRouter, Depends, HTTPException, Response, status
 from pydantic import BaseModel, Field
 from sqlalchemy import func
 from sqlmodel import select
@@ -188,7 +188,7 @@ def create_key(
 
 
 @router.post("/keys/{key_id}/revoke", status_code=status.HTTP_204_NO_CONTENT)
-def revoke_key(key_id: int, user: User = Depends(require_user)) -> None:
+def revoke_key(key_id: int, user: User = Depends(require_user)) -> Response:
     scoped = _user_scope(user)
     with get_session() as session:
         row = session.get(HubKey, key_id)
@@ -201,6 +201,7 @@ def revoke_key(key_id: int, user: User = Depends(require_user)) -> None:
             row.revoked_at = datetime.now(timezone.utc)
             session.add(row)
             session.commit()
+    return Response(status_code=status.HTTP_204_NO_CONTENT)
 
 
 # ---------------------------------------------------------------------------
@@ -329,7 +330,7 @@ def get_conversation(
 def delete_conversation(
     conv_id: str,
     user: User = Depends(require_user),
-) -> None:
+) -> Response:
     _require_owned_conversation(conv_id, user)
     with get_session() as session:
         for m in session.exec(
@@ -340,6 +341,7 @@ def delete_conversation(
         if conv:
             session.delete(conv)
         session.commit()
+    return Response(status_code=status.HTTP_204_NO_CONTENT)
 
 
 # ---------------------------------------------------------------------------
