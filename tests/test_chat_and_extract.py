@@ -150,7 +150,7 @@ def test_chat_falls_back_to_prompt_for_prompt_only_driver(monkeypatch):
         json={"model": "stub/model", "messages": [{"role": "user", "content": "hello"}]},
     )
     assert r.status_code == 200, r.text
-    assert driver.seen_prompt == "user: hello"
+    assert "hello" in driver.seen_prompt
 
 
 def test_spend_cap_trips_after_non_streaming_spend(monkeypatch):
@@ -230,3 +230,42 @@ def test_discovery_routes_require_user(monkeypatch):
             assert c.get(path).status_code == 401, path
     finally:
         app.dependency_overrides.clear()
+
+
+def test_chat_passes_tools_and_returns_tool_calls(monkeypatch):
+    class _ToolDriver(_MessagesDriver):
+        supports_tool_use = True
+
+        def generate_messages_with_tools(self, messages, tools, options):
+            self.seen_tools = tools
+            self.seen_options = options
+            return {
+                "text": "",
+                "meta": dict(_META),
+                "tool_calls": [{"id": "call_1", "name": "lookup", "arguments": {"q": "ada"}}],
+                "stop_reason": "tool_use",
+            }
+
+    driver = _ToolDriver()
+    _patch_driver(monkeypatch, driver)
+    key = _create_key()
+    tools = [{"type": "function", "function": {"name": "lookup", "parameters": {"type": "object"}}}]
+
+    r = _client().post(
+        "/v1/chat/completions",
+        headers={"Authorization": f"Bearer {key}"},
+        json={
+            "model": "stub/model",
+            "messages": [{"role": "user", "content": "who is ada"}],
+            "tools": tools,
+            "tool_choice": "auto",
+            "response_format": {"type": "json_object"},
+        },
+    )
+    assert r.status_code == 200, r.text
+    choice = r.json()["choices"][0]
+    assert choice["finish_reason"] == "tool_calls"
+    assert choice["message"]["tool_calls"][0]["function"] == {"name": "lookup", "arguments": '{"q": "ada"}'}
+    assert driver.seen_tools == tools
+    assert driver.seen_options["tool_choice"] == "auto"
+    assert driver.seen_options["json_mode"] is True

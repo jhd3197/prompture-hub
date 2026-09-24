@@ -104,13 +104,6 @@ def _patch_driver(monkeypatch, driver):
         return driver
 
     monkeypatch.setattr(p, "get_driver_for_model", fake)
-    # The router imports it locally; patch the symbol on the module too.
-    from prompture_hub.routers import openai_compat
-    monkeypatch.setattr(
-        openai_compat,
-        "_messages_to_prompt",
-        openai_compat._messages_to_prompt,  # noqa: keep
-    )
 
 
 def _parse_sse(body: str) -> list[dict | str]:
