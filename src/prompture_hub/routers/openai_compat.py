@@ -321,7 +321,9 @@ async def list_models(key: HubKey = Depends(require_hub_key)) -> dict[str, Any]:
     from prompture.infra.discovery import get_available_models
     from prompture.resilience import list_virtual_models
 
-    all_names: list[str] = list_virtual_models() + list(get_available_models())
+    from ..endpoints import served_models
+
+    all_names: list[str] = list_virtual_models() + list(get_available_models()) + served_models()
     if key.allowed_models:
         allowed = set(key.allowed_models)
         all_names = [n for n in all_names if n in allowed]

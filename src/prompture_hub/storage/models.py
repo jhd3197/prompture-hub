@@ -234,3 +234,23 @@ class AlertEvent(SQLModel, table=True):
     key_id: int | None = Field(default=None, index=True)
     created_at: datetime = Field(default_factory=_utcnow, index=True)
     acknowledged_at: datetime | None = Field(default=None)
+
+
+class CustomEndpoint(SQLModel, table=True):
+    """An OpenAI-compatible server registered in the hub.
+
+    Served as ``openai_compatible/<name>/<model>``. The API key is never
+    stored: ``api_key_env`` names the environment variable that holds it,
+    the same way real provider keys stay in ``.env``.
+    """
+
+    id: int | None = Field(default=None, primary_key=True)
+    name: str = Field(unique=True, index=True)
+    base_url: str
+    api_key_env: str | None = Field(default=None)
+    models: list[str] = Field(default_factory=list, sa_column=Column(JSON))
+    last_status: str | None = Field(default=None, description="online | slow | unreachable | error")
+    last_latency_ms: int | None = Field(default=None)
+    last_checked_at: datetime | None = Field(default=None)
+    user_id: int | None = Field(default=None, index=True, foreign_key="user.id")
+    created_at: datetime = Field(default_factory=_utcnow)

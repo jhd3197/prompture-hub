@@ -23,6 +23,7 @@ from .routers import (
     companion,
     control,
     conversations,
+    endpoints_api,
     extract,
     insights,
     openai_compat,
@@ -46,6 +47,9 @@ except PackageNotFoundError:  # not installed (e.g. running from a raw checkout)
 @asynccontextmanager
 async def lifespan(app: FastAPI):
     init_db()
+    from .endpoints import sync_all
+
+    sync_all()
     settings = get_settings()
     logger.info("prompture-hub ready on %s:%d", settings.host, settings.port)
     yield
@@ -101,6 +105,7 @@ def create_app() -> FastAPI:
     app.include_router(analytics.router, prefix="/api", tags=["spa"])
     app.include_router(companion.dashboard_router, prefix="/api", tags=["spa"])
     app.include_router(alerts_api.dashboard_router, prefix="/api", tags=["spa"])
+    app.include_router(endpoints_api.router, prefix="/api", tags=["spa"])
 
     @app.get("/health", tags=["meta"])
     def health() -> dict[str, str]:
