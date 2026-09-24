@@ -16,6 +16,7 @@ from starlette.middleware.sessions import SessionMiddleware
 from .auth import LoginRequired
 from .routers import (
     admin,
+    analytics,
     coding_agents,
     conversations,
     extract,
@@ -85,6 +86,7 @@ def create_app() -> FastAPI:
 
     # SPA-backing JSON.
     app.include_router(spa_api.router, prefix="/api", tags=["spa"])
+    app.include_router(analytics.router, prefix="/api", tags=["spa"])
 
     @app.get("/health", tags=["meta"])
     def health() -> dict[str, str]:

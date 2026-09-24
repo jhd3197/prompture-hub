@@ -44,6 +44,14 @@ class HubSettings(BaseSettings):
         description="Comma-separated email allowlist for dashboard login. Empty = no logins allowed.",
     )
 
+    trust_proxy_headers: bool = Field(
+        default=False,
+        description=(
+            "Trust X-Forwarded-For for the caller's IP (key IP allowlists). "
+            "Only enable when the hub sits behind a proxy you control."
+        ),
+    )
+
     google_client_id: str = Field(default="")
     google_client_secret: str = Field(default="")
 

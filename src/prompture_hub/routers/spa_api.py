@@ -16,6 +16,7 @@ from sqlalchemy import func
 from sqlmodel import select
 
 from ..auth import generate_key, require_user
+from ..policies import is_expired, normalize_ip_rules, resolve_expiry
 from ..settings import get_settings
 from ..storage.db import get_session
 from ..storage.models import Conversation, HubKey, Message, UsageRecord, User, iso_utc
@@ -38,7 +39,10 @@ def _serialize_key(k: HubKey) -> dict[str, Any]:
         "rate_limit_per_min": k.rate_limit_per_min,
         "created_at": iso_utc(k.created_at),
         "revoked_at": iso_utc(k.revoked_at),
-        "active": k.revoked_at is None,
+        "allowed_ips": k.allowed_ips or [],
+        "expires_at": iso_utc(k.expires_at),
+        "expired": is_expired(k),
+        "active": k.revoked_at is None and not is_expired(k),
     }
 
 
@@ -54,6 +58,8 @@ def _serialize_usage(u: UsageRecord) -> dict[str, Any]:
         "cost_usd": u.cost_usd,
         "latency_ms": u.latency_ms,
         "status": u.status,
+        "served_by": u.served_by,
+        "attempts": u.attempts,
         "timestamp": iso_utc(u.timestamp),
     }
 
@@ -148,6 +154,9 @@ class CreateKeyBody(BaseModel):
     daily_spend_cap_usd: float = Field(default=1.0, ge=0)
     spend_period: str = Field(default="day")
     rate_limit_per_min: int = Field(default=60, ge=1)
+    allowed_ips: list[str] = Field(default_factory=list)
+    expires_at: datetime | None = None
+    expires_in_days: int | None = None
 
 
 @router.post("/keys", status_code=status.HTTP_201_CREATED)
@@ -171,6 +180,8 @@ def create_key(
             daily_spend_cap_usd=body.daily_spend_cap_usd,
             spend_period=period,
             rate_limit_per_min=body.rate_limit_per_min,
+            allowed_ips=normalize_ip_rules(body.allowed_ips),
+            expires_at=resolve_expiry(body.expires_at, body.expires_in_days),
             user_id=user_id,
         )
         session.add(row)
@@ -184,6 +195,8 @@ def create_key(
             "daily_spend_cap_usd": row.daily_spend_cap_usd,
             "spend_period": row.spend_period,
             "rate_limit_per_min": row.rate_limit_per_min,
+            "allowed_ips": row.allowed_ips or [],
+            "expires_at": iso_utc(row.expires_at),
         }
 
 

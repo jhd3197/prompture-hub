@@ -14,6 +14,7 @@ from pydantic import BaseModel, Field
 from sqlmodel import select
 
 from ..auth import generate_key, require_admin
+from ..policies import is_expired, normalize_ip_rules, resolve_expiry
 from ..storage.db import get_session
 from ..storage.models import HubKey, UsageRecord, User, iso_utc
 
@@ -29,6 +30,9 @@ class CreateKeyRequest(BaseModel):
         description="day | week | month — UTC window the spend cap resets on.",
     )
     rate_limit_per_min: int = 60
+    allowed_ips: list[str] = Field(default_factory=list, description="IPs / CIDR ranges; empty = any.")
+    expires_at: datetime | None = None
+    expires_in_days: int | None = Field(default=None, description="Alternative to expires_at.")
     user_email: str | None = Field(
         default=None,
         description="Optional. If set, the key is attached to that user (must already exist).",
@@ -43,6 +47,8 @@ class CreateKeyResponse(BaseModel):
     daily_spend_cap_usd: float
     spend_period: str
     rate_limit_per_min: int
+    allowed_ips: list[str] = Field(default_factory=list)
+    expires_at: str | None = None
     user_id: int | None = None
     user_email: str | None = None
 
@@ -80,6 +86,8 @@ def create_key(body: CreateKeyRequest) -> CreateKeyResponse:
             daily_spend_cap_usd=body.daily_spend_cap_usd,
             spend_period=period,
             rate_limit_per_min=body.rate_limit_per_min,
+            allowed_ips=normalize_ip_rules(body.allowed_ips),
+            expires_at=resolve_expiry(body.expires_at, body.expires_in_days),
             user_id=user_id,
         )
         session.add(row)
@@ -93,6 +101,8 @@ def create_key(body: CreateKeyRequest) -> CreateKeyResponse:
             daily_spend_cap_usd=row.daily_spend_cap_usd,
             spend_period=row.spend_period,
             rate_limit_per_min=row.rate_limit_per_min,
+            allowed_ips=row.allowed_ips or [],
+            expires_at=iso_utc(row.expires_at),
             user_id=user_id,
             user_email=user_email,
         )
@@ -112,7 +122,10 @@ def list_keys() -> list[dict[str, Any]]:
                 "rate_limit_per_min": r.rate_limit_per_min,
                 "created_at": iso_utc(r.created_at),
                 "revoked_at": iso_utc(r.revoked_at),
-                "active": r.revoked_at is None,
+                "allowed_ips": r.allowed_ips or [],
+                "expires_at": iso_utc(r.expires_at),
+                "expired": is_expired(r),
+                "active": r.revoked_at is None and not is_expired(r),
                 "user_id": r.user_id,
             }
             for r in rows

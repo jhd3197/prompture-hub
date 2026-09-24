@@ -54,6 +54,12 @@ class HubKey(SQLModel, table=True):
         description="day | week | month — UTC-anchored window the cap resets on.",
     )
     rate_limit_per_min: int = Field(default=60)
+    allowed_ips: list[str] = Field(
+        default_factory=list,
+        sa_column=Column(JSON),
+        description="IPs / CIDR ranges allowed to use the key. Empty = any.",
+    )
+    expires_at: datetime | None = Field(default=None, index=True)
     created_at: datetime = Field(default_factory=_utcnow)
     revoked_at: datetime | None = Field(default=None, index=True)
     user_id: int | None = Field(default=None, index=True, foreign_key="user.id")
@@ -76,6 +82,11 @@ class UsageRecord(SQLModel, table=True):
         description="ok | error | quota_exceeded | rate_limited",
     )
     error: str | None = Field(default=None)
+    served_by: str | None = Field(
+        default=None,
+        description="Model that actually answered (differs from ``model`` for combos / fallbacks).",
+    )
+    attempts: int = Field(default=1, description="Upstream attempts, including retries and fallbacks.")
     timestamp: datetime = Field(default_factory=_utcnow, index=True)
 
 

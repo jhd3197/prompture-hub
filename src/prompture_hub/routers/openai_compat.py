@@ -152,13 +152,16 @@ async def chat_completions(
         _record(key.id, body.model, 0, 0, 0.0, 0, "error", str(exc))
         raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail=str(exc)) from exc
     except Exception as exc:
-        _record(key.id, body.model, 0, 0, 0.0, 0, "error", str(exc))
+        # A resilient route that ran out of targets carries its attempt trace.
+        route = {"attempts": getattr(exc, "attempts", None) or []}
+        _record(key.id, body.model, 0, 0, 0.0, 0, "error", str(exc), route=route)
         raise HTTPException(status_code=status.HTTP_502_BAD_GATEWAY, detail=str(exc)) from exc
 
     usage = outcome.usage
     _record(
         key.id, body.model, usage["prompt_tokens"], usage["completion_tokens"],
         outcome.cost, int((time.perf_counter() - started) * 1000), "ok", None,
+        route=outcome.meta.get("route"),
     )
     _persist(body, outcome)
     return outcome.to_completion(body.model, extra={"conversation_id": body.conversation_id})
@@ -208,7 +211,7 @@ def _stream_response(
             return
         _record(
             key.id, body.model, usage["prompt_tokens"], usage["completion_tokens"],
-            outcome.cost, elapsed, "ok", None,
+            outcome.cost, elapsed, "ok", None, route=outcome.meta.get("route"),
         )
         _persist(body, outcome)
 
@@ -237,8 +240,9 @@ def _stream_response(
 @router.get("/models")
 async def list_models(key: HubKey = Depends(require_hub_key)) -> dict[str, Any]:
     from prompture.infra.discovery import get_available_models
+    from prompture.resilience import list_virtual_models
 
-    all_names: list[str] = list(get_available_models())
+    all_names: list[str] = list_virtual_models() + list(get_available_models())
     if key.allowed_models:
         allowed = set(key.allowed_models)
         all_names = [n for n in all_names if n in allowed]
@@ -255,7 +259,10 @@ def _record(
     status_str: str,
     error: str | None,
     endpoint: str = _ENDPOINT,
+    route: dict[str, Any] | None = None,
 ) -> None:
+    served_by = (route or {}).get("served_by")
+    attempts = sum(1 for a in (route or {}).get("attempts", []) if a.get("outcome") in ("ok", "error"))
     with get_session() as session:
         session.add(
             UsageRecord(
@@ -269,6 +276,8 @@ def _record(
                 latency_ms=elapsed_ms,
                 status=status_str,
                 error=error,
+                served_by=served_by,
+                attempts=max(attempts, 1),
             )
         )
         session.commit()
