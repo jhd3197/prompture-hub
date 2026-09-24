@@ -37,6 +37,7 @@ from prompture.gateway import (
 from pydantic import BaseModel, ConfigDict
 
 from ..auth import require_hub_key
+from ..pipeline import after_turn, prepare_messages
 from ..quotas import enforce_quotas
 from ..storage.db import get_session
 from ..storage.models import Conversation, HubKey, UsageRecord
@@ -105,7 +106,7 @@ def _gate_and_prepare(
                 )
         history = load_history(body.conversation_id)
 
-    messages = to_driver_messages(history + list(body.messages))
+    messages = prepare_messages(to_driver_messages(history + list(body.messages)))
     options = driver_options(body)
     if body.tool_choice is not None:
         options["tool_choice"] = body.tool_choice
@@ -158,6 +159,7 @@ async def chat_completions(
         _record(key.id, body.model, 0, 0, 0.0, 0, "error", str(exc), route=route)
         raise HTTPException(status_code=status.HTTP_502_BAD_GATEWAY, detail=str(exc)) from exc
 
+    after_turn(outcome)
     usage = outcome.usage
     _record(
         key.id, body.model, usage["prompt_tokens"], usage["completion_tokens"],
@@ -202,6 +204,7 @@ def _stream_response(
     started = time.perf_counter()
 
     def on_complete(outcome: ChatOutcome) -> None:
+        after_turn(outcome)
         elapsed = int((time.perf_counter() - started) * 1000)
         usage = outcome.usage
         if outcome.error is not None:

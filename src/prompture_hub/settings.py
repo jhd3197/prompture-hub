@@ -44,6 +44,13 @@ class HubSettings(BaseSettings):
         description="Comma-separated email allowlist for dashboard login. Empty = no logins allowed.",
     )
 
+    compression: str = Field(
+        default="off",
+        description=(
+            "off | lite. lite trims older oversized tool results and duplicate "
+            "system prompts before calling the model (see prompture.infra.compression)."
+        ),
+    )
     trust_proxy_headers: bool = Field(
         default=False,
         description=(

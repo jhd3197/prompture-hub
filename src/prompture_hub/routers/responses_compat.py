@@ -25,6 +25,7 @@ from prompture.gateway import (
     stream_responses_events,
 )
 
+from ..pipeline import after_turn, prepare_messages
 from ..quotas import enforce_quotas
 from ..storage.models import HubKey
 from .openai_compat import _record
@@ -51,6 +52,7 @@ async def responses(request: Request, key: HubKey = Depends(enforce_quotas)):
             detail=f"Model '{model}' is not in this key's allowed_models whitelist.",
         )
     msgs, tools, options = responses_to_driver(body)
+    msgs = prepare_messages(msgs)
 
     from prompture.drivers import get_driver_for_model
 
@@ -58,6 +60,7 @@ async def responses(request: Request, key: HubKey = Depends(enforce_quotas)):
     started = time.perf_counter()
 
     def record(outcome: ChatOutcome) -> None:
+        after_turn(outcome)
         usage = outcome.usage
         _record(
             key.id, model, usage["prompt_tokens"], usage["completion_tokens"], outcome.cost,

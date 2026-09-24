@@ -291,3 +291,42 @@ def test_embeddings_metered(monkeypatch):
     assert body["usage"] == {"prompt_tokens": 6, "total_tokens": 6}
     rows = [u for u in _usage_rows() if u.endpoint == "/v1/embeddings"]
     assert len(rows) == 1 and rows[0].cost_usd == pytest.approx(0.001)
+
+
+def test_reasoning_replayed_and_compression(monkeypatch):
+    from prompture.gateway import get_reasoning_cache
+
+    get_reasoning_cache().clear()
+
+    class _Thinker(_MessagesDriver):
+        def generate_messages(self, messages, options):
+            self.seen_messages = messages
+            return {"text": "4", "meta": dict(_META), "reasoning_content": "2+2=4"}
+
+    driver = _Thinker()
+    _patch_driver(monkeypatch, driver)
+    key = _create_key()
+    headers = {"Authorization": f"Bearer {key}"}
+    _client().post("/v1/chat/completions", headers=headers,
+                   json={"model": "stub/model", "messages": [{"role": "user", "content": "2+2?"}]})
+
+    monkeypatch.setenv("HUB_COMPRESSION", "lite")
+    from prompture_hub.settings import get_settings
+    get_settings.cache_clear()
+    big = "x\n" * 10000
+    r = _client().post("/v1/chat/completions", headers=headers, json={
+        "model": "stub/model",
+        "messages": [
+            {"role": "user", "content": "2+2?"},
+            {"role": "assistant", "content": "4"},
+            {"role": "tool", "tool_call_id": "t1", "content": big},
+            {"role": "tool", "tool_call_id": "t2", "content": "latest"},
+            {"role": "user", "content": "and 3+3?"},
+        ],
+    })
+    assert r.status_code == 200, r.text
+    sent = driver.seen_messages
+    assert sent[1]["reasoning_content"] == "2+2=4"
+    assert "omitted" in sent[2]["content"] and len(sent[2]["content"]) < len(big)
+    assert sent[3]["content"] == "latest"
+    get_settings.cache_clear()

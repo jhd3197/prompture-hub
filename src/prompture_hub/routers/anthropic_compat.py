@@ -32,6 +32,7 @@ from prompture.gateway import (
 )
 
 from ..auth import require_hub_key
+from ..pipeline import after_turn, prepare_messages
 from ..quotas import enforce_quotas
 from ..storage.models import HubKey
 from .openai_compat import _record
@@ -70,6 +71,7 @@ async def messages(request: Request, key: HubKey = Depends(enforce_quotas)):
     model = resolve_model(requested)
     _check_allowed(key, requested, model)
     msgs, tools, options = anthropic_to_driver(body)
+    msgs = prepare_messages(msgs)
 
     from prompture.drivers import get_driver_for_model
 
@@ -77,6 +79,7 @@ async def messages(request: Request, key: HubKey = Depends(enforce_quotas)):
     started = time.perf_counter()
 
     def record(outcome: ChatOutcome) -> None:
+        after_turn(outcome)
         usage = outcome.usage
         _record(
             key.id, requested, usage["prompt_tokens"], usage["completion_tokens"], outcome.cost,
