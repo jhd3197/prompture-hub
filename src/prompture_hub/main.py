@@ -22,6 +22,7 @@ from .routers import (
     conversations,
     extract,
     openai_compat,
+    responses_compat,
     spa_api,
 )
 from .routers import (
@@ -78,6 +79,7 @@ def create_app() -> FastAPI:
     # Programmatic surfaces — unchanged.
     app.include_router(openai_compat.router, prefix="/v1", tags=["openai-compat"])
     app.include_router(anthropic_compat.router, prefix="/v1", tags=["anthropic-compat"])
+    app.include_router(responses_compat.router, prefix="/v1", tags=["openai-compat"])
     app.include_router(extract.router, prefix="/v1", tags=["prompture-native"])
     app.include_router(conversations.router, prefix="/v1", tags=["conversations"])
     app.include_router(coding_agents.router, prefix="/v1", tags=["coding-agents"])

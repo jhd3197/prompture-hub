@@ -91,10 +91,10 @@ model_provider = "prompture-hub"
 name = "prompture-hub"
 base_url = "{base}/v1"
 env_key = "PROMPTURE_HUB_API_KEY"
-wire_api = "chat"'''
+wire_api = "responses"'''
     return SetupPlan(
         "codex",
-        "Codex CLI through the hub's OpenAI-compatible chat completions.",
+        "Codex CLI through the hub's OpenAI Responses API (/v1/responses).",
         {"PROMPTURE_HUB_API_KEY": key},
         snippet,
         "~/.codex/config.toml (top-level keys must come before any [table])",
