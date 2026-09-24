@@ -70,6 +70,7 @@ class Call:
     first_token_ms: int | None = None
     activity: str | None = None
     finished: bool = False
+    routed_to: str | None = None
 
     def _base(self) -> dict[str, Any]:
         return {"request_id": self.request_id, "key_id": self.key_id}
@@ -99,9 +100,33 @@ class Call:
             )
 
 
-def begin(key: HubKey, model: str, endpoint: str, project: str | None = None, *, stream: bool = False) -> Call:
-    """Open a call and announce it on the live stream."""
-    call = Call(key_id=key.id, model=model, endpoint=endpoint, project=clean_project(project), stream=stream)
+def effective_model(key: HubKey, requested: str) -> str:
+    """The model that should serve a chat call on *key*: its route override, or what was asked for."""
+    return key.route_override or requested
+
+
+def begin(
+    key: HubKey,
+    model: str,
+    endpoint: str,
+    project: str | None = None,
+    *,
+    stream: bool = False,
+    routed_to: str | None = None,
+) -> Call:
+    """Open a call and announce it on the live stream.
+
+    *routed_to* names the model actually used when a key's route override
+    replaced the requested one.
+    """
+    call = Call(
+        key_id=key.id,
+        model=model,
+        endpoint=endpoint,
+        project=clean_project(project),
+        stream=stream,
+        routed_to=routed_to if routed_to and routed_to != model else None,
+    )
     live.get_bus().publish(
         "request.started",
         {
@@ -111,6 +136,7 @@ def begin(key: HubKey, model: str, endpoint: str, project: str | None = None, *,
             "endpoint": endpoint,
             "project": call.project,
             "stream": stream,
+            "routed_to": call.routed_to,
         },
     )
     return call
@@ -141,6 +167,8 @@ def record(
 ) -> UsageRecord:
     """Write one usage row for a finished (or rejected) call and return it."""
     served_by, attempts, route = route_facts(meta)
+    if served_by is None and call is not None:
+        served_by = call.routed_to
     row = UsageRecord(
         key_id=key_id,
         model=model or "",

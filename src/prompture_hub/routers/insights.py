@@ -32,7 +32,7 @@ router = APIRouter()
 def _visible_keys(principal: Principal) -> list[HubKey]:
     key_ids = visible_key_ids(principal)
     with get_session() as session:
-        stmt = select(HubKey).where(HubKey.revoked_at.is_(None)).order_by(HubKey.created_at)
+        stmt = select(HubKey).where(HubKey.revoked_at.is_(None)).order_by(HubKey.created_at, HubKey.id)
         if key_ids is not None:
             stmt = stmt.where(HubKey.id.in_(key_ids or [-1]))
         return [k for k in session.exec(stmt).all() if not is_expired(k)]
@@ -46,6 +46,8 @@ def _key_limits(key: HubKey) -> dict[str, Any]:
         "id": key.id,
         "name": key.name,
         "default_project": key.default_project,
+        "paused": key.paused_at is not None,
+        "route_override": key.route_override,
         "spend": {
             "period": period,
             "cap_usd": cap,

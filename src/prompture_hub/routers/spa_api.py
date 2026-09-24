@@ -45,6 +45,9 @@ def _serialize_key(k: HubKey) -> dict[str, Any]:
         "expired": is_expired(k),
         "active": k.revoked_at is None and not is_expired(k),
         "default_project": k.default_project,
+        "paused": k.paused_at is not None,
+        "paused_at": iso_utc(k.paused_at),
+        "route_override": k.route_override,
     }
 
 

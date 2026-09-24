@@ -56,8 +56,9 @@ async def extract(
     from prompture.drivers import get_driver_for_model
     from prompture.extraction.core import ask_for_json
 
-    driver = get_driver_for_model(body.model)
-    call = metering.begin(key, body.model, "/v1/extract", project)
+    routed = metering.effective_model(key, body.model)
+    driver = get_driver_for_model(routed)
+    call = metering.begin(key, body.model, "/v1/extract", project, routed_to=routed)
     started = time.perf_counter()
     try:
         result = await run_in_threadpool(

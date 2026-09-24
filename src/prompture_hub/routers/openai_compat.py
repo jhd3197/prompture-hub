@@ -145,12 +145,13 @@ async def chat_completions(
 
     from prompture.drivers import get_driver_for_model
 
-    driver = get_driver_for_model(body.model)
+    routed = metering.effective_model(key, body.model)
+    driver = get_driver_for_model(routed)
 
     if body.stream:
         return _stream_response(driver, body, key, messages, options, project)
 
-    call = metering.begin(key, body.model, _ENDPOINT, project)
+    call = metering.begin(key, body.model, _ENDPOINT, project, routed_to=routed)
     started = time.perf_counter()
     try:
         outcome = await run_in_threadpool(run_chat, driver, messages, options, tools=body.tools)
@@ -206,7 +207,9 @@ def _stream_response(
             detail="Streaming with tools is not supported yet. Retry with stream=false.",
         )
 
-    call = metering.begin(key, body.model, _ENDPOINT, project, stream=True)
+    call = metering.begin(
+        key, body.model, _ENDPOINT, project, stream=True, routed_to=metering.effective_model(key, body.model)
+    )
     started = time.perf_counter()
 
     def on_complete(outcome: ChatOutcome) -> None:

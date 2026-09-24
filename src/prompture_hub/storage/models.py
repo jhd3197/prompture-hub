@@ -67,6 +67,13 @@ class HubKey(SQLModel, table=True):
         default=None,
         description="Project a call is attributed to when the request sends no X-Project header.",
     )
+    paused_at: datetime | None = Field(
+        default=None, description="Set while the key is paused; paused keys are refused like revoked ones."
+    )
+    route_override: str | None = Field(
+        default=None,
+        description="When set, chat calls on this key are served by this model / combo instead of the one requested.",
+    )
 
 
 class UsageRecord(SQLModel, table=True):

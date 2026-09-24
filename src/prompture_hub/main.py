@@ -21,6 +21,7 @@ from .routers import (
     anthropic_compat,
     coding_agents,
     companion,
+    control,
     conversations,
     extract,
     insights,
@@ -89,6 +90,7 @@ def create_app() -> FastAPI:
     app.include_router(companion.router, prefix="/v1", tags=["companion"])
     app.include_router(insights.router, prefix="/v1", tags=["companion"])
     app.include_router(alerts_api.router, prefix="/v1", tags=["companion"])
+    app.include_router(control.router, prefix="/v1", tags=["companion"])
     app.include_router(admin.router, prefix="/admin", tags=["admin"])
 
     # Auth flow (OAuth redirects need server-side handling).

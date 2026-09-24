@@ -62,8 +62,9 @@ async def responses(
 
     from prompture.drivers import get_driver_for_model
 
-    driver = get_driver_for_model(model)
-    call = metering.begin(key, model, _ENDPOINT, project, stream=bool(body.get("stream")))
+    routed = metering.effective_model(key, model)
+    driver = get_driver_for_model(routed)
+    call = metering.begin(key, model, _ENDPOINT, project, stream=bool(body.get("stream")), routed_to=routed)
     started = time.perf_counter()
 
     def record(outcome: ChatOutcome) -> None:

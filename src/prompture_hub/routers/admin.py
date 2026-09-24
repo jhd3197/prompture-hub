@@ -135,6 +135,8 @@ def list_keys() -> list[dict[str, Any]]:
                 "active": r.revoked_at is None and not is_expired(r),
                 "user_id": r.user_id,
                 "default_project": r.default_project,
+                "paused": r.paused_at is not None,
+                "route_override": r.route_override,
             }
             for r in rows
         ]
