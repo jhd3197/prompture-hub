@@ -21,6 +21,7 @@ from fastapi.concurrency import run_in_threadpool
 from sqlmodel import select
 
 from ..companion_auth import Principal, require_read, visible_key_ids
+from ..metering import paused_providers
 from ..policies import is_expired
 from ..quotas import _window_start, calls_in_last_minute, spend_in_window, window_end
 from ..storage.db import get_session
@@ -96,6 +97,7 @@ async def limits(
         "keys": keys,
         "providers": _provider_limits(),
         "accounts": None,
+        "paused_providers": sorted(paused_providers()),
     }
     # Provider rate limits and balances describe the hub's own upstream
     # credentials, so they are shown only to callers who can see every key.

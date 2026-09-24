@@ -1,8 +1,10 @@
-"""Key controls a companion (``control`` scope) or the dashboard can apply.
+"""Key and provider controls a companion (``control`` scope) or the dashboard can apply.
 
 - ``POST  /v1/keys/{id}/pause`` / ``/resume`` — refuse or re-allow calls on a key.
 - ``PATCH /v1/keys/{id}`` — change the spend cap / period, route override
   or default project.
+- ``POST  /v1/providers/{name}/pause`` / ``/resume`` — refuse or re-allow every
+  direct call to one upstream provider (admin-level: callers who see every key).
 
 Every change is announced as ``key.updated`` on the live stream so other
 companions and dashboards refresh without polling.
@@ -20,7 +22,7 @@ from .. import live
 from ..companion_auth import Principal, require_control, visible_key_ids
 from ..metering import clean_project
 from ..storage.db import get_session
-from ..storage.models import HubKey, iso_utc
+from ..storage.models import HubKey, ProviderControl, iso_utc
 
 router = APIRouter()
 
@@ -109,3 +111,33 @@ def update_key(key_id: int, body: KeyControlPatch, principal: Principal = Depend
         if changes:
             _announce(key, changes, principal)
         return _state(key)
+
+
+def _set_provider_paused(name: str, paused: bool, principal: Principal) -> dict[str, Any]:
+    if not principal.sees_everything:
+        raise HTTPException(
+            status_code=status.HTTP_403_FORBIDDEN,
+            detail="Pausing a provider affects every key; only callers who see all keys can do it.",
+        )
+    name = name.strip().lower()
+    if not name or "/" in name:
+        raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail="Provider name like 'openai' or 'claude'.")
+    with get_session() as session:
+        row = session.get(ProviderControl, name) or ProviderControl(provider=name)
+        changed = (row.paused_at is not None) != paused
+        row.paused_at = datetime.now(timezone.utc) if paused else None
+        session.add(row)
+        session.commit()
+    if changed:
+        live.get_bus().publish("provider.updated", {"provider": name, "paused": paused, "by": principal.kind})
+    return {"provider": name, "paused": paused}
+
+
+@router.post("/providers/{name}/pause")
+def pause_provider(name: str, principal: Principal = Depends(require_control)) -> dict[str, Any]:
+    return _set_provider_paused(name, True, principal)
+
+
+@router.post("/providers/{name}/resume")
+def resume_provider(name: str, principal: Principal = Depends(require_control)) -> dict[str, Any]:
+    return _set_provider_paused(name, False, principal)

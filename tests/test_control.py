@@ -185,3 +185,46 @@ class TestCapAndProject:
         key_id, _ = _key()
         _client().delete(f"/admin/keys/{key_id}", headers=ADMIN)
         assert _client().post(f"/v1/keys/{key_id}/pause", headers=ADMIN).status_code == 404
+
+
+class TestProviderPause:
+    def test_pause_blocks_direct_calls_to_that_provider_only(self, requested_models):
+        _, key = _key()
+        r = _client().post("/v1/providers/openai/pause", headers=ADMIN)
+        assert r.json() == {"provider": "openai", "paused": True}
+        refused = _chat(key, "openai/gpt-4o")
+        assert refused.status_code == 403
+        assert "openai" in refused.json()["detail"]
+        assert _chat(key, "groq/llama").status_code == 200
+        assert _client().get("/v1/limits?accounts=false", headers=ADMIN).json()["paused_providers"] == ["openai"]
+
+        _client().post("/v1/providers/openai/resume", headers=ADMIN)
+        assert _chat(key, "openai/gpt-4o").status_code == 200
+        assert _client().get("/v1/limits?accounts=false", headers=ADMIN).json()["paused_providers"] == []
+
+        from prompture_hub.live import get_bus
+
+        changes = [e["paused"] for e in get_bus().replay(0) if e["type"] == "provider.updated"]
+        assert changes == [True, False]
+
+    def test_compatible_profiles_and_route_overrides_are_checked(self, requested_models):
+        key_id, key = _key()
+        _client().post("/v1/providers/fake/pause", headers=ADMIN)
+        assert _chat(key, "openai_compatible/fake/echo").status_code == 403
+        # A route override onto a paused provider is refused too.
+        _client().patch(f"/v1/keys/{key_id}", headers=ADMIN, json={"route_override": "openai_compatible/fake/echo"})
+        assert _chat(key, "openai/gpt-4o").status_code == 403
+
+    def test_needs_full_visibility_and_valid_name(self):
+        reader = {"Authorization": f"Bearer {_read_only_token()}"}
+        assert _client().post("/v1/providers/openai/pause", headers=reader).status_code == 403
+        assert _client().post("/v1/providers/%20/pause", headers=ADMIN).status_code == 400
+
+
+def test_provider_of():
+    from prompture_hub.metering import provider_of
+
+    assert provider_of("openai/gpt-4o") == "openai"
+    assert provider_of("openai_compatible/fake/echo") == "fake"
+    assert provider_of("combo/cheap") is None
+    assert provider_of("gpt-4o") is None

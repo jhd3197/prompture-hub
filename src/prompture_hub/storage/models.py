@@ -254,3 +254,10 @@ class CustomEndpoint(SQLModel, table=True):
     last_checked_at: datetime | None = Field(default=None)
     user_id: int | None = Field(default=None, index=True, foreign_key="user.id")
     created_at: datetime = Field(default_factory=_utcnow)
+
+
+class ProviderControl(SQLModel, table=True):
+    """Hub-wide switch for one upstream provider (``openai``, ``claude``, or a compatible profile)."""
+
+    provider: str = Field(primary_key=True)
+    paused_at: datetime | None = Field(default=None)

@@ -100,9 +100,47 @@ class Call:
             )
 
 
+def provider_of(model: str) -> str | None:
+    """Upstream provider named by a model string, or ``None`` for virtual models.
+
+    ``openai_compatible/<profile>/<model>`` belongs to its profile; combos,
+    ``auto/`` and ``fusion/`` routes pick a provider at call time.
+    """
+    parts = model.split("/")
+    if len(parts) < 2 or parts[0] in ("combo", "auto", "fusion"):
+        return None
+    if parts[0] == "openai_compatible" and len(parts) >= 3:
+        return parts[1]
+    return parts[0]
+
+
+def paused_providers() -> set[str]:
+    from sqlmodel import select
+
+    from .storage.models import ProviderControl
+
+    with get_session() as session:
+        return {
+            row.provider
+            for row in session.exec(select(ProviderControl).where(ProviderControl.paused_at.is_not(None))).all()
+        }
+
+
 def effective_model(key: HubKey, requested: str) -> str:
-    """The model that should serve a chat call on *key*: its route override, or what was asked for."""
-    return key.route_override or requested
+    """The model that should serve a chat call on *key*: its route override, or what was asked for.
+
+    Refuses the call when that model's provider is paused hub-wide.
+    """
+    model = key.route_override or requested
+    provider = provider_of(model)
+    if provider is not None and provider in paused_providers():
+        from fastapi import HTTPException, status
+
+        raise HTTPException(
+            status_code=status.HTTP_403_FORBIDDEN,
+            detail=f"Provider '{provider}' is paused on this hub.",
+        )
+    return model
 
 
 def begin(
