@@ -521,7 +521,7 @@ async def run_agent_console(
 
 
 @router.get("/agents")
-def agents() -> dict[str, Any]:
+def agents(_user: User = Depends(require_user)) -> dict[str, Any]:
     """Coding agent CLIs discovered on the host.
 
     Joins :func:`get_available_coding_agents` (runtime availability) with
@@ -605,7 +605,7 @@ def _grouped_models(
 
 
 @router.get("/modalities")
-def modalities() -> dict[str, Any]:
+def modalities(_user: User = Depends(require_user)) -> dict[str, Any]:
     """Per-modality discovery: image-gen, video-gen, TTS, STT, embeddings,
     rerank, moderation. Each shape mirrors ``/api/models`` so the same
     React row component renders all of them."""
@@ -641,7 +641,7 @@ def modalities() -> dict[str, Any]:
 
 
 @router.get("/models")
-def models() -> dict[str, Any]:
+def models(_user: User = Depends(require_user)) -> dict[str, Any]:
     discovery_error: str | None = None
     names: list[str] = []
     try:

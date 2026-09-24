@@ -5,11 +5,9 @@
   OpenAI's chunk shape, terminated by ``data: [DONE]``.
 - ``GET  /v1/models``           — lists models the calling key is allowed to use.
 
-v0.1 limitations:
-- ``messages`` are flattened to a single prompt string for non-streaming calls
-  (``driver.generate``). Streaming uses ``driver.generate_messages_stream`` so
-  the chat shape is preserved for drivers that support it.
-- No ``/v1/embeddings`` yet.
+Non-streaming calls use ``driver.generate_messages`` when the driver supports
+chat-shaped input and fall back to a flattened prompt otherwise. Blocking
+driver calls run in a worker thread so they don't stall the event loop.
 """
 
 from __future__ import annotations
@@ -21,6 +19,7 @@ from collections.abc import Iterator
 from typing import Any
 
 from fastapi import APIRouter, Depends, HTTPException, status
+from fastapi.concurrency import run_in_threadpool
 from fastapi.responses import StreamingResponse
 from pydantic import BaseModel
 
@@ -102,10 +101,9 @@ async def chat_completions(
     if body.stream:
         return _stream_response(driver, body, key, full_messages, options)
 
-    prompt = _messages_to_prompt(full_messages)
     started = time.perf_counter()
     try:
-        result = driver.generate(prompt, options)
+        result = await run_in_threadpool(_generate, driver, full_messages, options)
     except Exception as exc:
         _record(key.id, body.model, "/v1/chat/completions", 0, 0, 0.0, 0, "error", str(exc))
         raise HTTPException(
@@ -115,11 +113,13 @@ async def chat_completions(
     elapsed_ms = int((time.perf_counter() - started) * 1000)
 
     text = result.get("text", "")
-    usage = result.get("usage", {}) or {}
-    prompt_tok = int(usage.get("prompt_tokens", 0))
-    completion_tok = int(usage.get("completion_tokens", 0))
-    total_tok = int(usage.get("total_tokens", prompt_tok + completion_tok))
-    cost = float(usage.get("cost", 0.0))
+    # Drivers report usage under ``meta``; ``usage`` is accepted for stubs and
+    # older wrappers that already speak the OpenAI shape.
+    usage = result.get("meta") or result.get("usage") or {}
+    prompt_tok = int(usage.get("prompt_tokens", 0) or 0)
+    completion_tok = int(usage.get("completion_tokens", 0) or 0)
+    total_tok = int(usage.get("total_tokens", 0) or (prompt_tok + completion_tok))
+    cost = float(usage.get("cost", 0.0) or 0.0)
 
     _record(
         key.id, body.model, "/v1/chat/completions",
@@ -192,7 +192,12 @@ def _stream_response(
     full_messages: list[ChatMessage],
     options: dict[str, Any],
 ) -> StreamingResponse:
-    if not hasattr(driver, "generate_messages_stream"):
+    # Every Prompture driver inherits ``generate_messages_stream`` (it raises
+    # NotImplementedError), so the capability flag is the real signal.
+    can_stream = getattr(driver, "supports_streaming", None)
+    if can_stream is None:
+        can_stream = hasattr(driver, "generate_messages_stream")
+    if not can_stream:
         raise HTTPException(
             status_code=status.HTTP_400_BAD_REQUEST,
             detail=(
@@ -298,6 +303,15 @@ async def list_models(key: HubKey = Depends(require_hub_key)) -> dict[str, Any]:
 
 def _messages_to_prompt(messages: list[ChatMessage]) -> str:
     return "\n\n".join(f"{m.role}: {m.content}" for m in messages)
+
+
+def _generate(driver: Any, messages: list[ChatMessage], options: dict[str, Any]) -> dict[str, Any]:
+    """Call the driver with chat-shaped input when it supports it."""
+    if getattr(driver, "supports_messages", False):
+        return driver.generate_messages(
+            [{"role": m.role, "content": m.content} for m in messages], options
+        )
+    return driver.generate(_messages_to_prompt(messages), options)
 
 
 def _record(

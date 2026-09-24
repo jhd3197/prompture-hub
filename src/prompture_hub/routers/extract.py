@@ -16,6 +16,7 @@ import time
 from typing import Any
 
 from fastapi import APIRouter, Depends, HTTPException, status
+from fastapi.concurrency import run_in_threadpool
 from pydantic import BaseModel, ConfigDict, Field
 
 from ..quotas import enforce_quotas
@@ -56,7 +57,8 @@ async def extract(
     driver = get_driver_for_model(body.model)
     started = time.perf_counter()
     try:
-        result = ask_for_json(
+        result = await run_in_threadpool(
+            ask_for_json,
             driver=driver,
             content_prompt=body.content,
             json_schema=body.json_schema,
@@ -102,7 +104,7 @@ async def extract(
         session.commit()
 
     return {
-        "data": result.get("data"),
+        "data": result.get("json_object"),
         "usage": {
             "prompt_tokens": prompt_tok,
             "completion_tokens": completion_tok,
