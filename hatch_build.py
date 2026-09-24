@@ -111,9 +111,16 @@ class SpaBuildHook(BuildHookInterface):
     # -- helpers ----------------------------------------------------------------
 
     def _run(self, cmd: list[str], cwd: str) -> int:
-        # shell=False with a fully resolved npm path keeps this safe on Windows
-        # (shutil.which resolves npm.cmd) and POSIX alike.
-        proc = subprocess.run(cmd, cwd=cwd)  # noqa: S603
+        # On Windows, `npm` resolves to `npm.cmd`, which CreateProcess can't
+        # invoke directly under Python 3.12+ (raises WinError 193 — the
+        # implicit cmd.exe fallback that 3.11 had is gone). Route through
+        # cmd.exe via shell=True; list2cmdline handles arg quoting safely.
+        if sys.platform == "win32":
+            proc = subprocess.run(
+                subprocess.list2cmdline(cmd), cwd=cwd, shell=True  # noqa: S602
+            )
+        else:
+            proc = subprocess.run(cmd, cwd=cwd)  # noqa: S603
         return proc.returncode
 
     def _info(self, msg: str) -> None:

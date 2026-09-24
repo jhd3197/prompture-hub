@@ -108,6 +108,7 @@ def require_user(request: Request) -> User:
 
 
 async def require_hub_key(
+    request: Request,
     authorization: Annotated[str | None, Header()] = None,
     x_api_key: Annotated[str | None, Header(alias="X-API-Key")] = None,
 ) -> HubKey:
@@ -135,4 +136,7 @@ async def require_hub_key(
             status_code=status.HTTP_401_UNAUTHORIZED,
             detail="Invalid or revoked hub key.",
         )
+    from .policies import enforce_key_policies
+
+    enforce_key_policies(key, request)
     return key

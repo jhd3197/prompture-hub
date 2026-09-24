@@ -123,12 +123,19 @@ function KeyRow({ k, onRevoke }: { k: HubKey; onRevoke: (k: HubKey) => void }) {
         <td className="faint mono" style={{ whiteSpace: "nowrap", fontSize: 12.5 }}>
           {new Date(k.created_at).toLocaleDateString()}
         </td>
-        <td><KeyStatus active={k.active} /></td>
+        <td><KeyStatus active={k.active} expired={k.expired} /></td>
         <td className="num">
-          {k.active ? (
-            <button className="btn btn-sm btn-danger" onClick={() => onRevoke(k)}>
-              <IconTrash />Revoke
-            </button>
+          {k.revoked_at === null ? (
+            <div className="row" style={{ gap: 8, justifyContent: "flex-end" }}>
+              {k.expires_at && (
+                <span className="faint" style={{ fontSize: 12 }}>
+                  {k.expired ? "expired" : "expires"} {new Date(k.expires_at).toLocaleDateString()}
+                </span>
+              )}
+              <button className="btn btn-sm btn-danger" onClick={() => onRevoke(k)}>
+                <IconTrash />Revoke
+              </button>
+            </div>
           ) : (
             <span className="faint" style={{ fontSize: 12 }}>
               revoked {k.revoked_at && new Date(k.revoked_at).toLocaleDateString()}

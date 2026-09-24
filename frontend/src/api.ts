@@ -1,5 +1,5 @@
 import type {
-  AgentsResponse, AuthProviders, ConversationDetail, ConversationSummary,
+  AgentsResponse, Analytics, AuthProviders, ConversationDetail, ConversationSummary,
   CreatedKey, CurrentUser, HubKey, ModalitiesResponse, ModelsResponse, Overview,
 } from "./types";
 
@@ -46,6 +46,8 @@ export const api = {
     daily_spend_cap_usd: number;
     spend_period: "day" | "week" | "month";
     rate_limit_per_min: number;
+    expires_in_days?: number | null;
+    allowed_ips?: string[];
   }) => request<CreatedKey>("/api/keys", {
     method: "POST",
     body: JSON.stringify(data),
@@ -53,6 +55,7 @@ export const api = {
   revokeKey: (id: number) =>
     request<void>(`/api/keys/${id}/revoke`, { method: "POST" }),
   models: () => request<ModelsResponse>("/api/models"),
+  analytics: (days: number) => request<Analytics>(`/api/analytics?days=${days}`),
   agents: () => request<AgentsResponse>("/api/agents"),
   modalities: () => request<ModalitiesResponse>("/api/modalities"),
   workspaceDirs: () => request<{

@@ -30,6 +30,13 @@ function periodSuffix(p: SpendPeriod): string {
   return p === "day" ? "day" : p === "week" ? "week" : "month";
 }
 
+const EXPIRY_OPTIONS: Array<{ label: string; days: number | null }> = [
+  { label: "Never", days: null },
+  { label: "7 days", days: 7 },
+  { label: "30 days", days: 30 },
+  { label: "90 days", days: 90 },
+];
+
 export function CreateKeyPage() {
   const navigate = useNavigate();
   const toast = useToast();
@@ -40,6 +47,9 @@ export function CreateKeyPage() {
   const [period, setPeriod] = useState<SpendPeriod>("day");
   const [cap, setCap] = useState("1");
   const [rate, setRate] = useState("60");
+  const [expiryDays, setExpiryDays] = useState<number | null>(null);
+  const [ipText, setIpText] = useState("");
+  const ipCount = ipText.split(/[\s,]+/).filter(Boolean).length;
   const [submitting, setSubmitting] = useState(false);
   const [error, setError] = useState<string | null>(null);
 
@@ -74,6 +84,8 @@ export function CreateKeyPage() {
         daily_spend_cap_usd: capNumber,
         spend_period: period,
         rate_limit_per_min: rateNumber,
+        expires_in_days: expiryDays,
+        allowed_ips: ipText.split(/[\s,]+/).map(s => s.trim()).filter(Boolean),
       });
       toast(`Created ${created.name}`);
       // Hand the plaintext off to the /keys page via router state so it
@@ -288,6 +300,41 @@ export function CreateKeyPage() {
                 </span>
               </div>
             </div>
+
+            <div className="grid-2" style={{ marginTop: 16 }}>
+              <div className="field">
+                <div className="field-row">
+                  <label>Expires</label>
+                  <span className="mini-note">key stops working after</span>
+                </div>
+                <div className="seg" role="radiogroup" aria-label="Key expiry">
+                  {EXPIRY_OPTIONS.map(opt => (
+                    <button
+                      key={opt.label}
+                      type="button"
+                      role="radio"
+                      aria-checked={expiryDays === opt.days}
+                      className={expiryDays === opt.days ? "on" : ""}
+                      onClick={() => setExpiryDays(opt.days)}
+                    >
+                      {opt.label}
+                    </button>
+                  ))}
+                </div>
+              </div>
+              <div className="field">
+                <div className="field-row">
+                  <label htmlFor="k-ips">Allowed IPs</label>
+                  <span className="mini-note">optional · IPs or CIDR ranges</span>
+                </div>
+                <input
+                  id="k-ips" className="input mono"
+                  placeholder="any IP — e.g. 10.0.0.0/24, 203.0.113.7"
+                  value={ipText} onChange={e => setIpText(e.target.value)}
+                />
+                <span className="hint">Calls from other addresses get a 403.</span>
+              </div>
+            </div>
           </div>
         </div>
 
@@ -327,6 +374,14 @@ export function CreateKeyPage() {
 
               <dt className="faint">Resets</dt>
               <dd style={{ margin: 0, fontSize: 12.5 }}>{periodCopy}</dd>
+
+              <dt className="faint">Expires</dt>
+              <dd style={{ margin: 0 }}>{expiryDays ? `in ${expiryDays} days` : "never"}</dd>
+
+              <dt className="faint">IPs</dt>
+              <dd style={{ margin: 0, fontSize: 12.5 }} className={ipCount ? "mono" : ""}>
+                {ipCount ? `${ipCount} allowed range${ipCount > 1 ? "s" : ""}` : "any"}
+              </dd>
             </dl>
 
             <div className="policy-summary" role="status" style={{ marginTop: 16 }}>

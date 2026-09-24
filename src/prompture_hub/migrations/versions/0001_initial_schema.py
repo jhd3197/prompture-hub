@@ -1,7 +1,7 @@
 """initial schema
 
 Revision ID: e3e4239796fd
-Revises: 
+Revises:
 Create Date: 2026-05-28 22:16:23.649564
 """
 
@@ -9,10 +9,9 @@ from __future__ import annotations
 
 from collections.abc import Sequence
 
-from alembic import op
 import sqlalchemy as sa
 import sqlmodel
-
+from alembic import op
 
 revision: str = 'e3e4239796fd'
 down_revision: str | None = None

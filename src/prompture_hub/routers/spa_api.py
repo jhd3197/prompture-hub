@@ -10,12 +10,13 @@ from __future__ import annotations
 from datetime import datetime, timedelta, timezone
 from typing import Any
 
-from fastapi import APIRouter, Depends, HTTPException, status
+from fastapi import APIRouter, Depends, HTTPException, Response, status
 from pydantic import BaseModel, Field
 from sqlalchemy import func
 from sqlmodel import select
 
 from ..auth import generate_key, require_user
+from ..policies import is_expired, normalize_ip_rules, resolve_expiry
 from ..settings import get_settings
 from ..storage.db import get_session
 from ..storage.models import Conversation, HubKey, Message, UsageRecord, User, iso_utc
@@ -38,7 +39,10 @@ def _serialize_key(k: HubKey) -> dict[str, Any]:
         "rate_limit_per_min": k.rate_limit_per_min,
         "created_at": iso_utc(k.created_at),
         "revoked_at": iso_utc(k.revoked_at),
-        "active": k.revoked_at is None,
+        "allowed_ips": k.allowed_ips or [],
+        "expires_at": iso_utc(k.expires_at),
+        "expired": is_expired(k),
+        "active": k.revoked_at is None and not is_expired(k),
     }
 
 
@@ -54,6 +58,8 @@ def _serialize_usage(u: UsageRecord) -> dict[str, Any]:
         "cost_usd": u.cost_usd,
         "latency_ms": u.latency_ms,
         "status": u.status,
+        "served_by": u.served_by,
+        "attempts": u.attempts,
         "timestamp": iso_utc(u.timestamp),
     }
 
@@ -148,6 +154,9 @@ class CreateKeyBody(BaseModel):
     daily_spend_cap_usd: float = Field(default=1.0, ge=0)
     spend_period: str = Field(default="day")
     rate_limit_per_min: int = Field(default=60, ge=1)
+    allowed_ips: list[str] = Field(default_factory=list)
+    expires_at: datetime | None = None
+    expires_in_days: int | None = None
 
 
 @router.post("/keys", status_code=status.HTTP_201_CREATED)
@@ -171,6 +180,8 @@ def create_key(
             daily_spend_cap_usd=body.daily_spend_cap_usd,
             spend_period=period,
             rate_limit_per_min=body.rate_limit_per_min,
+            allowed_ips=normalize_ip_rules(body.allowed_ips),
+            expires_at=resolve_expiry(body.expires_at, body.expires_in_days),
             user_id=user_id,
         )
         session.add(row)
@@ -184,11 +195,13 @@ def create_key(
             "daily_spend_cap_usd": row.daily_spend_cap_usd,
             "spend_period": row.spend_period,
             "rate_limit_per_min": row.rate_limit_per_min,
+            "allowed_ips": row.allowed_ips or [],
+            "expires_at": iso_utc(row.expires_at),
         }
 
 
 @router.post("/keys/{key_id}/revoke", status_code=status.HTTP_204_NO_CONTENT)
-def revoke_key(key_id: int, user: User = Depends(require_user)) -> None:
+def revoke_key(key_id: int, user: User = Depends(require_user)) -> Response:
     scoped = _user_scope(user)
     with get_session() as session:
         row = session.get(HubKey, key_id)
@@ -201,6 +214,7 @@ def revoke_key(key_id: int, user: User = Depends(require_user)) -> None:
             row.revoked_at = datetime.now(timezone.utc)
             session.add(row)
             session.commit()
+    return Response(status_code=status.HTTP_204_NO_CONTENT)
 
 
 # ---------------------------------------------------------------------------
@@ -329,7 +343,7 @@ def get_conversation(
 def delete_conversation(
     conv_id: str,
     user: User = Depends(require_user),
-) -> None:
+) -> Response:
     _require_owned_conversation(conv_id, user)
     with get_session() as session:
         for m in session.exec(
@@ -340,6 +354,7 @@ def delete_conversation(
         if conv:
             session.delete(conv)
         session.commit()
+    return Response(status_code=status.HTTP_204_NO_CONTENT)
 
 
 # ---------------------------------------------------------------------------
@@ -519,7 +534,7 @@ async def run_agent_console(
 
 
 @router.get("/agents")
-def agents() -> dict[str, Any]:
+def agents(_user: User = Depends(require_user)) -> dict[str, Any]:
     """Coding agent CLIs discovered on the host.
 
     Joins :func:`get_available_coding_agents` (runtime availability) with
@@ -603,7 +618,7 @@ def _grouped_models(
 
 
 @router.get("/modalities")
-def modalities() -> dict[str, Any]:
+def modalities(_user: User = Depends(require_user)) -> dict[str, Any]:
     """Per-modality discovery: image-gen, video-gen, TTS, STT, embeddings,
     rerank, moderation. Each shape mirrors ``/api/models`` so the same
     React row component renders all of them."""
@@ -639,7 +654,7 @@ def modalities() -> dict[str, Any]:
 
 
 @router.get("/models")
-def models() -> dict[str, Any]:
+def models(_user: User = Depends(require_user)) -> dict[str, Any]:
     discovery_error: str | None = None
     names: list[str] = []
     try:

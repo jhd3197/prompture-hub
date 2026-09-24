@@ -142,6 +142,7 @@ def test_delete_removes_conversation_and_messages():
 
     # And no orphan messages.
     from sqlmodel import select
+
     from prompture_hub.storage.db import get_session
     from prompture_hub.storage.models import Message
     with get_session() as session:

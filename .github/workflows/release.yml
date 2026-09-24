@@ -1,52 +1,73 @@
 name: Release to PyPI
 
-# Publishes prompture-hub to PyPI when a version tag (v*) is pushed.
+# Prompture-style flow: develop on `dev`, PR into `main`. Every push to `main`
+# auto-bumps the patch version, syncs it into the repo, builds the SPA + wheel
+# (so the published package needs no Node), publishes to PyPI via Trusted
+# Publishing (OIDC — no stored token), and cuts a GitHub Release.
 #
-# The Vite/React SPA is PREBUILT here (npm ci && npm run build) so the published
-# wheel/sdist bundles static assets and end users never need Node/npm — just
-# `pip install prompture-hub`. Publishing uses PyPI Trusted Publishing (OIDC):
-# no API token is stored in repo secrets.
-#
-# One-time setup on PyPI: create a Trusted Publisher for project "prompture-hub"
-# pointing at owner/repo, workflow file "release.yml", environment "pypi".
+# One-time PyPI setup: a Trusted Publisher for project "prompture-hub" ->
+# owner jhd3197, repo prompture-hub, workflow "release.yml", environment "pypi".
 
 on:
   push:
-    tags:
-      - "v*"
+    branches: [main]
 
-permissions:
-  contents: read
+concurrency:
+  group: release-${{ github.ref }}
+  cancel-in-progress: false
 
 jobs:
-  build:
-    name: Build SPA + wheel/sdist
+  version:
+    name: Compute + tag next version
     runs-on: ubuntu-latest
+    # Don't react to the bot's own [skip ci] version-bump commit.
+    if: ${{ !contains(github.event.head_commit.message, '[skip ci]') }}
+    permissions:
+      contents: write   # create + push the tag
+    outputs:
+      new_version: ${{ steps.tag.outputs.new_version }}
+      new_tag: ${{ steps.tag.outputs.new_tag }}
+      changelog: ${{ steps.tag.outputs.changelog }}
     steps:
       - name: Checkout
         uses: actions/checkout@v4
         with:
           fetch-depth: 0
 
-      # The tag is the source of truth for the published version. Write it into
-      # pyproject.toml before building so `v1.2.3` publishes 1.2.3 — without this
-      # every release would ship the static version in pyproject and PyPI would
-      # reject the duplicate.
-      - name: Set version from tag
-        run: |
-          VERSION="${GITHUB_REF_NAME#v}"
-          echo "Releasing version: $VERSION"
-          python - "$VERSION" <<'PY'
-          import pathlib, re, sys
-          version = sys.argv[1]
-          path = pathlib.Path("pyproject.toml")
-          text = path.read_text()
-          text, n = re.subn(r'(?m)^version = ".*"$', f'version = "{version}"', text, count=1)
-          if n != 1:
-              sys.exit("could not find a 'version = ...' line in pyproject.toml")
-          path.write_text(text)
-          print(f"pyproject.toml version set to {version}")
-          PY
+      - name: Compute next version + create tag
+        id: tag
+        uses: mathieudutour/github-tag-action@v6.2
+        with:
+          github_token: ${{ secrets.GITHUB_TOKEN }}
+          release_branches: main
+          default_bump: patch
+          tag_prefix: v
+
+  release:
+    name: Build + publish to PyPI
+    needs: version
+    if: ${{ needs.version.outputs.new_version != '' }}
+    runs-on: ubuntu-latest
+    permissions:
+      contents: write   # push the version-bump commit + create the release
+      id-token: write   # OIDC for Trusted Publishing
+    environment:
+      name: pypi
+      url: https://pypi.org/p/prompture-hub
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+          ref: main
+
+      - name: Setup Python 3.12
+        uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+
+      - name: Sync version into pyproject + README + VERSION
+        run: python .github/scripts/sync_version.py "${{ needs.version.outputs.new_version }}"
 
       - name: Setup Node 20
         uses: actions/setup-node@v4
@@ -61,60 +82,49 @@ jobs:
           npm ci
           npm run build
 
-      - name: Verify SPA landed in package tree
-        run: |
-          test -f src/prompture_hub/static/app/index.html \
-            || { echo "::error::SPA build missing src/prompture_hub/static/app/index.html"; exit 1; }
-
-      - name: Setup Python 3.12
-        uses: actions/setup-python@v5
-        with:
-          python-version: "3.12"
-
       - name: Build sdist + wheel
         run: |
-          python -m pip install --upgrade pip build
+          python -m pip install --upgrade pip build twine
           python -m build
-
-      - name: Verify built artifacts contain the SPA
-        run: |
-          python -m pip install --upgrade twine
           twine check dist/*
-          echo "--- wheel contents ---"
+
+      - name: Verify SPA + migrations bundled in the wheel
+        run: |
           python - <<'PY'
           import glob, sys, zipfile
-          wheels = glob.glob("dist/*.whl")
-          assert wheels, "no wheel built"
-          names = zipfile.ZipFile(wheels[0]).namelist()
-          needle = "prompture_hub/static/app/index.html"
-          if needle not in names:
-              print("\n".join(names))
-              sys.exit(f"::error::{needle} not bundled in wheel")
-          print(f"OK: {needle} present in {wheels[0]}")
+          names = zipfile.ZipFile(glob.glob("dist/*.whl")[0]).namelist()
+          required = [
+              "prompture_hub/static/app/index.html",
+              "prompture_hub/migrations/env.py",
+              "prompture_hub/migrations/versions/0001_initial_schema.py",
+          ]
+          missing = [r for r in required if r not in names]
+          if missing:
+              sys.exit("::error::wheel missing: " + ", ".join(missing))
+          print("wheel OK: SPA + migrations bundled")
           PY
 
-      - name: Upload dist artifact
-        uses: actions/upload-artifact@v4
-        with:
-          name: dist
-          path: dist/
-          if-no-files-found: error
-
-  publish:
-    name: Publish to PyPI (Trusted Publishing / OIDC)
-    needs: [build]
-    runs-on: ubuntu-latest
-    environment:
-      name: pypi
-      url: https://pypi.org/p/prompture-hub
-    permissions:
-      id-token: write  # required for OIDC trusted publishing
-    steps:
-      - name: Download dist artifact
-        uses: actions/download-artifact@v4
-        with:
-          name: dist
-          path: dist/
-
-      - name: Publish to PyPI
+      - name: Publish to PyPI (Trusted Publishing / OIDC)
         uses: pypa/gh-action-pypi-publish@release/v1
+
+      # After a successful publish, persist the bumped version back to main so
+      # the repo always shows the latest released version. [skip ci] keeps this
+      # from re-triggering the workflow.
+      - name: Commit version bump back to main
+        run: |
+          git config user.name "github-actions[bot]"
+          git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
+          git add pyproject.toml README.md VERSION
+          if git diff --cached --quiet; then
+            echo "No version files changed."
+          else
+            git commit -m "🔖 v${{ needs.version.outputs.new_version }} [skip ci]"
+            git push origin HEAD:main
+          fi
+
+      - name: Create GitHub Release
+        uses: softprops/action-gh-release@v2
+        with:
+          tag_name: ${{ needs.version.outputs.new_tag }}
+          name: ${{ needs.version.outputs.new_tag }}
+          body: ${{ needs.version.outputs.changelog }}

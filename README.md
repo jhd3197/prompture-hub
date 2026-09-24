@@ -15,6 +15,22 @@
 
 Self-hosted gateway over [Prompture](https://github.com/jhd3197/prompture)'s multi-provider LLM driver registry. Think OpenRouter, except *you* control the keys, the metering, and the trust boundary.
 
+<picture>
+  <source media="(prefers-color-scheme: dark)" srcset="docs/screenshots/dashboard-dark.png">
+  <img alt="prompture-hub dashboard: spend, active keys and live metered calls" src="docs/screenshots/dashboard-light.png">
+</picture>
+
+<table>
+  <tr>
+    <td width="50%"><img alt="Analytics: requests, spend, error rate, latency and fallbacks by model, provider and key" src="docs/screenshots/analytics-dark.png"><br><sub><b>Analytics</b> — spend, errors, p95 latency and fallback rate by model, provider and key</sub></td>
+    <td width="50%"><img alt="Issuing a hub key with spend cap, rate limit, expiry and IP allowlist" src="docs/screenshots/create-key-dark.png"><br><sub><b>Scoped keys</b> — model allowlist, spend cap, rate limit, expiry and IP allowlist</sub></td>
+  </tr>
+  <tr>
+    <td width="50%"><img alt="Hub keys list with status and expiry" src="docs/screenshots/keys-dark.png"><br><sub><b>Keys</b> — revoke instantly; expired keys stop working on their own</sub></td>
+    <td width="50%"><img alt="Resumable conversation with per-turn tokens and cost" src="docs/screenshots/sessions-dark.png"><br><sub><b>Sessions</b> — resumable conversations with per-turn tokens and cost</sub></td>
+  </tr>
+</table>
+
 ## Why this exists
 
 You have provider API keys (OpenAI, Anthropic, Groq, Ollama, etc.). You want to let other apps — including apps you don't fully trust — call LLMs *through* your keys, with per-app limits and observability, **without** ever handing those apps the real provider keys.
@@ -37,6 +53,8 @@ The untrusted app never sees `OPENAI_API_KEY` (or any other real provider secret
 ```bash
 pip install prompture-hub
 ```
+
+Already using Prompture? `pip install "prompture[hub]"` installs the same thing, and `prompture hub` launches it.
 
 The dashboard UI ships **prebuilt inside the package** — no Node, no npm, no checkout required. (Prefer an isolated install? `pipx install prompture-hub`.)
 
@@ -105,13 +123,29 @@ curl http://localhost:1984/v1/chat/completions \
 
 The dashboard lives at `http://localhost:1984/` and shows recent keys, recent calls, and 24-hour spend.
 
-## Two API surfaces
+## API surfaces
 
 | Surface | Endpoints | Use case |
 |---|---|---|
-| **OpenAI-compatible** | `/v1/chat/completions`, `/v1/models` | Drop-in for any OpenAI-SDK client. Maximum compatibility. |
+| **OpenAI-compatible** | `/v1/chat/completions`, `/v1/models` | Drop-in for any OpenAI-SDK client: `tools`, `image_url` parts, `response_format` and streaming all pass through. Wire format comes from `prompture.gateway`, so it matches `prompture serve` exactly. |
+| **OpenAI Responses** | `/v1/responses` | What Codex CLI speaks. Function calls + streaming; stateless (`previous_response_id` is rejected — send full `input`). |
+| **Anthropic-compatible** | `/v1/messages`, `/v1/messages/count_tokens` | What Claude Code and the Anthropic SDKs speak. Tools + streaming. Bare ids like `claude-sonnet-4-5` route to Prompture's `claude/` driver; anything else (`combo/…`, `auto/…`, `openai/gpt-4o`) works too. Key via `x-api-key` or bearer. |
+| **Embeddings** | `/v1/embeddings` | Prompture's embedding drivers, metered per key. |
 | **Prompture-native** | `/v1/extract` | Structured extraction with JSON Schema. Exposes Prompture's `ask_for_json` + strategies (`provider_native`, `tool_call`, `prompted_repair`) over HTTP. |
 | **Sessions** | `/v1/conversations` (CRUD) + `conversation_id` on `/v1/chat/completions` | Resumable chat: a later request replays prior turns server-side so the client doesn't need to ship full history. |
+
+Every chat surface accepts Prompture's virtual model names — `combo/<name>` fallback chains, `auto/cheap` / `auto/best`, aliases and `fusion/<name>` — so retries, key rotation and failover happen inside the hub. Each usage row records which model actually served the call and how many attempts it took.
+
+### Connect your tools
+
+`prompture-hub setup <tool>` prints exactly what a tool needs to go through the hub (env vars for bash and PowerShell, or a config snippet):
+
+```bash
+prompture-hub setup claude-code --create-key --model combo/chat   # mint a key + print env
+prompture-hub setup claude-code --key ph_... --write               # merge into ~/.claude/settings.json (backed up first)
+prompture-hub setup codex --key ph_... --model auto/best            # ~/.codex/config.toml snippet (Responses API)
+prompture-hub setup aider | cursor | continue | openai | anthropic
+```
 
 ### Resumable sessions
 
@@ -272,14 +306,21 @@ The Vite dev server proxies all backend paths (`/api`, `/auth`, `/v1`, `/admin`,
 - **Hub-issued keys** are 32-byte URL-safe tokens, prefixed `ph_`. Only the SHA-256 hash is stored; plaintext is returned to the caller once at creation.
 - **Admin endpoints** (`/admin/*`) require `Authorization: Bearer $HUB_ADMIN_TOKEN`. Different credential from hub-issued keys — separation of duties.
 - **Real provider keys** (`OPENAI_API_KEY`, etc.) are read directly by Prompture's drivers from environment. They never appear in any HTTP response.
-- **Localhost-only by default**: `HUB_HOST=127.0.0.1`. Public exposure requires reverse proxy + TLS + rate-limit middleware (v0.2).
+- **Per-key policies**: model allowlist, spend cap per day/week/month, rate limit, optional **expiry** and **IP / CIDR allowlist**. `X-Forwarded-For` is only honored with `HUB_TRUST_PROXY_HEADERS=true`.
+- **Localhost-only by default**: `HUB_HOST=127.0.0.1`. Public exposure requires a reverse proxy + TLS.
+
+## Analytics
+
+The dashboard's **Analytics** page (and `GET /api/analytics?days=7|30|90`) shows requests, spend, error rate, p50/p95 latency and fallback rate per day, broken down by requested model, serving provider and hub key, plus the most recent errors.
 
 ## Roadmap
 
-- **v0.1** — scaffold, OpenAI-compat (non-streaming), extract, scoped keys, embedded Jinja dashboard
-- **v0.2** — SSE streaming, /v1/embeddings, rate-limit middleware, key creation UI form, React frontend matching CachiBot's stack
-- **v0.3** — multi-user (`/admin/users`, OAuth admin, per-user key namespacing)
-- **v0.4** — hosted-ready (Docker image, Postgres backend, public deploy guide, audit log)
+**Shipped:** OpenAI chat completions, Responses API and Anthropic Messages API (streaming + tools), embeddings, `/v1/extract`, combos / `auto/` / fusion routing with per-call route metering, scoped keys (model allowlist, spend caps, rate limits, expiry, IP allowlists), analytics dashboard, `setup` command for coding tools, reasoning replay, optional prompt compression, resumable conversations, coding-agent runner, OAuth login, Alembic migrations.
+
+**Next:**
+- Combo / alias management in the dashboard (today: `PROMPTURE_COMBOS_FILE`)
+- Multi-user and hosted deployments — Postgres backend, audit log
+- `previous_response_id` support for `/v1/responses`
 
 ## License
 

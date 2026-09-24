@@ -104,13 +104,6 @@ def _patch_driver(monkeypatch, driver):
         return driver
 
     monkeypatch.setattr(p, "get_driver_for_model", fake)
-    # The router imports it locally; patch the symbol on the module too.
-    from prompture_hub.routers import openai_compat
-    monkeypatch.setattr(
-        openai_compat,
-        "_messages_to_prompt",
-        openai_compat._messages_to_prompt,  # noqa: keep
-    )
 
 
 def _parse_sse(body: str) -> list[dict | str]:
@@ -242,10 +235,12 @@ def test_stream_still_enforces_quotas(monkeypatch):
     plaintext = _create_key(daily_cap=0.001, rate_per_min=1000)
 
     # Seed one usage row that puts us over the cap.
+    from datetime import datetime, timezone
+
+    from sqlmodel import select
+
     from prompture_hub.storage.db import get_session
     from prompture_hub.storage.models import HubKey, UsageRecord
-    from sqlmodel import select
-    from datetime import datetime, timezone
     with get_session() as session:
         kid = session.exec(select(HubKey).where(HubKey.name == "stream-test")).first().id
         session.add(UsageRecord(
