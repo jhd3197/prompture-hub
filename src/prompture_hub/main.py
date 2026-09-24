@@ -144,8 +144,8 @@ def create_app() -> FastAPI:
 app = create_app()
 
 
-def cli() -> None:
-    """Console-script entry point: runs uvicorn against the app."""
+def serve() -> None:
+    """Run the hub with uvicorn using HUB_* settings."""
     import uvicorn
 
     settings = get_settings()
@@ -155,3 +155,49 @@ def cli() -> None:
         port=settings.port,
         reload=False,
     )
+
+
+def cli(argv: list[str] | None = None) -> None:
+    """Console-script entry point.
+
+    ``prompture-hub`` / ``prompture-hub serve`` runs the server;
+    ``prompture-hub setup <tool>`` prints (or writes) client configuration.
+    """
+    import argparse
+    import sys
+
+    from .setup_tools import TOOLS, build_plan, create_setup_key
+
+    parser = argparse.ArgumentParser(prog="prompture-hub")
+    sub = parser.add_subparsers(dest="command")
+    sub.add_parser("serve", help="Run the hub (default).")
+    setup = sub.add_parser("setup", help="Point a coding tool or SDK at this hub.")
+    setup.add_argument("tool", choices=sorted(TOOLS))
+    setup.add_argument("--key", help="Hub key to use (default: a placeholder).")
+    setup.add_argument("--create-key", action="store_true", help="Mint a new hub key named setup:<tool>.")
+    setup.add_argument("--model", default="auto/balanced", help="Model, combo or alias the tool should use.")
+    setup.add_argument("--small-model", default=None, help="Model for background/fast calls (default: --model).")
+    setup.add_argument("--base-url", default=None, help="Hub URL (default: HUB_BASE_URL).")
+    setup.add_argument("--write", action="store_true", help="Write the tool's config file where supported.")
+
+    args = parser.parse_args(sys.argv[1:] if argv is None else argv)
+    if args.command in (None, "serve"):
+        serve()
+        return
+
+    key = args.key
+    if args.create_key:
+        key = create_setup_key(args.tool)
+        print(f"# Created hub key 'setup:{args.tool}' - shown once, store it now.\n")
+    plan = build_plan(
+        args.tool,
+        base_url=args.base_url or get_settings().base_url,
+        key=key,
+        model=args.model,
+        small_model=args.small_model,
+    )
+    print(plan.render())
+    if args.write:
+        if plan.writer is None:
+            parser.exit(1, f"--write isn't supported for {args.tool}; copy the snippet above instead.\n")
+        print(plan.writer())
