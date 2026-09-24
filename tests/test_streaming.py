@@ -235,10 +235,12 @@ def test_stream_still_enforces_quotas(monkeypatch):
     plaintext = _create_key(daily_cap=0.001, rate_per_min=1000)
 
     # Seed one usage row that puts us over the cap.
+    from datetime import datetime, timezone
+
+    from sqlmodel import select
+
     from prompture_hub.storage.db import get_session
     from prompture_hub.storage.models import HubKey, UsageRecord
-    from sqlmodel import select
-    from datetime import datetime, timezone
     with get_session() as session:
         kid = session.exec(select(HubKey).where(HubKey.name == "stream-test")).first().id
         session.add(UsageRecord(

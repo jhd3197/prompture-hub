@@ -5,7 +5,8 @@ from __future__ import annotations
 import logging
 import os
 from contextlib import asynccontextmanager
-from importlib.metadata import PackageNotFoundError, version as _pkg_version
+from importlib.metadata import PackageNotFoundError
+from importlib.metadata import version as _pkg_version
 
 from fastapi import FastAPI, HTTPException, Request, status
 from fastapi.responses import FileResponse, RedirectResponse
@@ -15,12 +16,14 @@ from starlette.middleware.sessions import SessionMiddleware
 from .auth import LoginRequired
 from .routers import (
     admin,
-    auth as auth_router,
     coding_agents,
     conversations,
     extract,
     openai_compat,
     spa_api,
+)
+from .routers import (
+    auth as auth_router,
 )
 from .settings import get_settings
 from .storage.db import init_db

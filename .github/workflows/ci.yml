@@ -75,3 +75,29 @@ jobs:
       # source checkout with no npm build step.
       - name: Run tests
         run: pytest -q
+
+  # Catches breakage from upcoming Prompture changes before they're released:
+  # the hub is built on prompture.gateway / prompture.resilience, so run the
+  # suite against Prompture's dev branch too. Non-blocking.
+  prompture-dev:
+    name: Python tests vs Prompture dev
+    runs-on: ubuntu-latest
+    continue-on-error: true
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Setup Python 3.12
+        uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+          cache: pip
+
+      - name: Install project against Prompture dev
+        run: |
+          python -m pip install --upgrade pip
+          pip install -e ".[dev]"
+          pip install --upgrade "prompture @ git+https://github.com/jhd3197/prompture.git@dev"
+
+      - name: Run tests
+        run: pytest -q

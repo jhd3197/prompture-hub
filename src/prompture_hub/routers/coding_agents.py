@@ -21,7 +21,6 @@ into it.
 from __future__ import annotations
 
 import json
-import os
 import time
 from collections.abc import AsyncIterator
 from pathlib import Path
@@ -206,6 +205,7 @@ async def stream_run(body: RunAgentRequest, cwd: str) -> AsyncIterator[tuple[str
             model=body.model,
             extra_args=body.extra_args or None,
             session_id=body.session_id,
+            timeout=timeout,
         ):
             d = _event_to_dict(ev)
             yield _sse(d), None

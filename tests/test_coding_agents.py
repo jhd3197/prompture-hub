@@ -7,8 +7,6 @@ fork subprocesses.
 from __future__ import annotations
 
 import json
-import os
-import tempfile
 import types
 
 import pytest
@@ -200,9 +198,11 @@ def test_subpath_under_workspace_is_allowed(monkeypatch):
 def test_quotas_still_gate(monkeypatch):
     pt = _new_key(daily_cap=0.001, rate_per_min=1000)
     from datetime import datetime, timezone
+
+    from sqlmodel import select
+
     from prompture_hub.storage.db import get_session
     from prompture_hub.storage.models import HubKey, UsageRecord
-    from sqlmodel import select
     with get_session() as session:
         kid = session.exec(
             select(HubKey).where(HubKey.name == "agent-test")

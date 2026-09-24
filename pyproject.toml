@@ -78,5 +78,9 @@ target-version = "py310"
 select = ["E", "F", "I", "W", "UP", "B"]
 ignore = ["E501"]
 
+[tool.ruff.lint.flake8-bugbear]
+# FastAPI's dependency-injection markers are meant to live in defaults.
+extend-immutable-calls = ["fastapi.Depends", "fastapi.Query", "fastapi.Header", "fastapi.Body", "fastapi.Security"]
+
 [tool.pytest.ini_options]
 testpaths = ["tests"]

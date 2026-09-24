@@ -86,6 +86,7 @@ def _seed_usage(key_id: int, *, cost: float, count: int, ago_seconds: int = 0) -
 
 def _key_id_for(name: str) -> int:
     from sqlmodel import select
+
     from prompture_hub.storage.db import get_session
     from prompture_hub.storage.models import HubKey
     with get_session() as session:
