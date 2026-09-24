@@ -15,6 +15,22 @@
 
 Self-hosted gateway over [Prompture](https://github.com/jhd3197/prompture)'s multi-provider LLM driver registry. Think OpenRouter, except *you* control the keys, the metering, and the trust boundary.
 
+<picture>
+  <source media="(prefers-color-scheme: dark)" srcset="docs/screenshots/dashboard-dark.png">
+  <img alt="prompture-hub dashboard: spend, active keys and live metered calls" src="docs/screenshots/dashboard-light.png">
+</picture>
+
+<table>
+  <tr>
+    <td width="50%"><img alt="Analytics: requests, spend, error rate, latency and fallbacks by model, provider and key" src="docs/screenshots/analytics-dark.png"><br><sub><b>Analytics</b> — spend, errors, p95 latency and fallback rate by model, provider and key</sub></td>
+    <td width="50%"><img alt="Issuing a hub key with spend cap, rate limit, expiry and IP allowlist" src="docs/screenshots/create-key-dark.png"><br><sub><b>Scoped keys</b> — model allowlist, spend cap, rate limit, expiry and IP allowlist</sub></td>
+  </tr>
+  <tr>
+    <td width="50%"><img alt="Hub keys list with status and expiry" src="docs/screenshots/keys-dark.png"><br><sub><b>Keys</b> — revoke instantly; expired keys stop working on their own</sub></td>
+    <td width="50%"><img alt="Resumable conversation with per-turn tokens and cost" src="docs/screenshots/sessions-dark.png"><br><sub><b>Sessions</b> — resumable conversations with per-turn tokens and cost</sub></td>
+  </tr>
+</table>
+
 ## Why this exists
 
 You have provider API keys (OpenAI, Anthropic, Groq, Ollama, etc.). You want to let other apps — including apps you don't fully trust — call LLMs *through* your keys, with per-app limits and observability, **without** ever handing those apps the real provider keys.

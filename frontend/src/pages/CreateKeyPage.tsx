@@ -49,6 +49,7 @@ export function CreateKeyPage() {
   const [rate, setRate] = useState("60");
   const [expiryDays, setExpiryDays] = useState<number | null>(null);
   const [ipText, setIpText] = useState("");
+  const ipCount = ipText.split(/[\s,]+/).filter(Boolean).length;
   const [submitting, setSubmitting] = useState(false);
   const [error, setError] = useState<string | null>(null);
 
@@ -373,6 +374,14 @@ export function CreateKeyPage() {
 
               <dt className="faint">Resets</dt>
               <dd style={{ margin: 0, fontSize: 12.5 }}>{periodCopy}</dd>
+
+              <dt className="faint">Expires</dt>
+              <dd style={{ margin: 0 }}>{expiryDays ? `in ${expiryDays} days` : "never"}</dd>
+
+              <dt className="faint">IPs</dt>
+              <dd style={{ margin: 0, fontSize: 12.5 }} className={ipCount ? "mono" : ""}>
+                {ipCount ? `${ipCount} allowed range${ipCount > 1 ? "s" : ""}` : "any"}
+              </dd>
             </dl>
 
             <div className="policy-summary" role="status" style={{ marginTop: 16 }}>
