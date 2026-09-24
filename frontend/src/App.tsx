@@ -12,9 +12,13 @@ import { Dashboard } from "./pages/Dashboard";
 import { KeysPage } from "./pages/KeysPage";
 import { LoginPage } from "./pages/LoginPage";
 import { ModelsPage } from "./pages/ModelsPage";
+import { PairPage } from "./pages/PairPage";
 import { SettingsPage } from "./pages/SettingsPage";
 import { AppearanceSettings } from "./pages/settings/AppearanceSettings";
+import { AlertsSettings } from "./pages/settings/AlertsSettings";
 import { ApiSettings } from "./pages/settings/ApiSettings";
+import { DevicesSettings } from "./pages/settings/DevicesSettings";
+import { EndpointsSettings } from "./pages/settings/EndpointsSettings";
 import { NetworkSettings } from "./pages/settings/NetworkSettings";
 import type { CurrentUser } from "./types";
 
@@ -54,11 +58,15 @@ function AuthedShell({ user }: { user: CurrentUser }) {
             <Route path="/keys/new" element={<CreateKeyPage />} />
             <Route path="/conversations" element={<ConversationsPage />} />
             <Route path="/models" element={<ModelsPage />} />
+            <Route path="/pair" element={<PairPage />} />
             <Route path="/settings" element={<SettingsPage />}>
               <Route index element={<Navigate to="appearance" replace />} />
               <Route path="appearance" element={<AppearanceSettings />} />
               <Route path="network" element={<NetworkSettings />} />
               <Route path="api" element={<ApiSettings />} />
+              <Route path="devices" element={<DevicesSettings />} />
+              <Route path="alerts" element={<AlertsSettings />} />
+              <Route path="endpoints" element={<EndpointsSettings />} />
             </Route>
             <Route path="*" element={<Navigate to="/" replace />} />
           </Routes>

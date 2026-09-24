@@ -83,8 +83,24 @@ function RevokeKeyModal({
   );
 }
 
-function KeyRow({ k, onRevoke }: { k: HubKey; onRevoke: (k: HubKey) => void }) {
+function KeyRow({
+  k, onRevoke, onChanged,
+}: {
+  k: HubKey;
+  onRevoke: (k: HubKey) => void;
+  onChanged: () => void;
+}) {
   const [open, setOpen] = useState(false);
+  const toast = useToast();
+  const togglePause = async () => {
+    try {
+      await (k.paused ? api.resumeKey(k.id) : api.pauseKey(k.id));
+      toast(k.paused ? `Resumed ${k.name}` : `Paused ${k.name} — calls are refused until you resume it`);
+      onChanged();
+    } catch (e) {
+      toast(`Couldn't update ${k.name}: ${e}`);
+    }
+  };
   return (
     <>
       <tr>
@@ -93,7 +109,11 @@ function KeyRow({ k, onRevoke }: { k: HubKey; onRevoke: (k: HubKey) => void }) {
             <span className={`kdot ${k.active ? "live" : "dead"}`}></span>
             <div>
               <div className="strong" style={{ fontWeight: 600, fontSize: 13.5 }}>{k.name}</div>
-              <div className="mono faint" style={{ fontSize: 11.5 }}>key #{k.id}</div>
+              <div className="mono faint" style={{ fontSize: 11.5 }}>
+                key #{k.id}
+                {k.default_project && <> · project {k.default_project}</>}
+                {k.route_override && <> · routed to {k.route_override}</>}
+              </div>
             </div>
           </div>
         </td>
@@ -123,7 +143,11 @@ function KeyRow({ k, onRevoke }: { k: HubKey; onRevoke: (k: HubKey) => void }) {
         <td className="faint mono" style={{ whiteSpace: "nowrap", fontSize: 12.5 }}>
           {new Date(k.created_at).toLocaleDateString()}
         </td>
-        <td><KeyStatus active={k.active} expired={k.expired} /></td>
+        <td>
+          {k.paused && k.active
+            ? <span className="badge badge-warn">paused</span>
+            : <KeyStatus active={k.active} expired={k.expired} />}
+        </td>
         <td className="num">
           {k.revoked_at === null ? (
             <div className="row" style={{ gap: 8, justifyContent: "flex-end" }}>
@@ -132,6 +156,9 @@ function KeyRow({ k, onRevoke }: { k: HubKey; onRevoke: (k: HubKey) => void }) {
                   {k.expired ? "expired" : "expires"} {new Date(k.expires_at).toLocaleDateString()}
                 </span>
               )}
+              <button className="btn btn-sm" onClick={togglePause}>
+                {k.paused ? "Resume" : "Pause"}
+              </button>
               <button className="btn btn-sm btn-danger" onClick={() => onRevoke(k)}>
                 <IconTrash />Revoke
               </button>
@@ -271,7 +298,7 @@ export function KeysPage() {
                 </tr>
               </thead>
               <tbody>
-                {keys.map(k => <KeyRow key={k.id} k={k} onRevoke={setRevoking} />)}
+                {keys.map(k => <KeyRow key={k.id} k={k} onRevoke={setRevoking} onChanged={refresh} />)}
               </tbody>
             </table>
           </div>
