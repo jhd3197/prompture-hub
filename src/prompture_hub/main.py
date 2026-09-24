@@ -17,6 +17,7 @@ from .auth import LoginRequired
 from .routers import (
     admin,
     analytics,
+    anthropic_compat,
     coding_agents,
     conversations,
     extract,
@@ -76,6 +77,7 @@ def create_app() -> FastAPI:
 
     # Programmatic surfaces — unchanged.
     app.include_router(openai_compat.router, prefix="/v1", tags=["openai-compat"])
+    app.include_router(anthropic_compat.router, prefix="/v1", tags=["anthropic-compat"])
     app.include_router(extract.router, prefix="/v1", tags=["prompture-native"])
     app.include_router(conversations.router, prefix="/v1", tags=["conversations"])
     app.include_router(coding_agents.router, prefix="/v1", tags=["coding-agents"])
