@@ -80,6 +80,7 @@ class _Bucket:
 @router.get("/analytics")
 def analytics(
     days: int = Query(default=7, ge=1, le=90),
+    project: str | None = Query(default=None, max_length=100, description="Only calls attributed to this project."),
     user: User = Depends(require_user),
 ) -> dict[str, Any]:
     now = datetime.now(timezone.utc)
@@ -90,6 +91,8 @@ def analytics(
         stmt = select(UsageRecord).where(UsageRecord.timestamp >= start)
         if key_ids is not None:
             stmt = stmt.where(UsageRecord.key_id.in_(key_ids or [-1]))
+        if project:
+            stmt = stmt.where(UsageRecord.project == project)
         rows = session.exec(stmt).all()
         key_names = {k.id: k.name for k in session.exec(select(HubKey)).all()}
 
@@ -98,6 +101,7 @@ def analytics(
     by_model: dict[str, _Bucket] = defaultdict(_Bucket)
     by_provider: dict[str, _Bucket] = defaultdict(_Bucket)
     by_key: dict[int, _Bucket] = defaultdict(_Bucket)
+    by_project: dict[str | None, _Bucket] = defaultdict(_Bucket)
     errors: list[UsageRecord] = []
 
     for u in rows:
@@ -110,6 +114,7 @@ def analytics(
         if served:
             by_provider[served.split("/", 1)[0]].add(u)
         by_key[u.key_id].add(u)
+        by_project[u.project].add(u)
         if u.status in _ERROR_STATUSES:
             errors.append(u)
 
@@ -128,12 +133,13 @@ def analytics(
 
     errors.sort(key=lambda u: u.timestamp, reverse=True)
     return {
-        "range": {"start": iso_utc(start), "end": iso_utc(now), "days": days},
+        "range": {"start": iso_utc(start), "end": iso_utc(now), "days": days, "project": project},
         "totals": totals.to_dict(),
         "by_day": day_list,
         "by_model": ranked(by_model, "model"),
         "by_provider": ranked(by_provider, "provider"),
         "by_key": by_key_list,
+        "by_project": ranked(by_project, "project"),
         "recent_errors": [
             {
                 "timestamp": iso_utc(u.timestamp),
@@ -142,6 +148,7 @@ def analytics(
                 "key_id": u.key_id,
                 "key_name": key_names.get(u.key_id),
                 "endpoint": u.endpoint,
+                "project": u.project,
                 "error": (u.error or "")[:300],
             }
             for u in errors[:20]

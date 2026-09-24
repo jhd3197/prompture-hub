@@ -32,6 +32,7 @@ from prompture.gateway import (
 )
 
 from ..auth import require_hub_key
+from ..metering import request_project
 from ..pipeline import after_turn, prepare_messages
 from ..quotas import enforce_quotas
 from ..storage.models import HubKey
@@ -63,7 +64,11 @@ def _check_allowed(key: HubKey, requested: str, resolved: str) -> None:
 
 
 @router.post("/messages")
-async def messages(request: Request, key: HubKey = Depends(enforce_quotas)):
+async def messages(
+    request: Request,
+    key: HubKey = Depends(enforce_quotas),
+    project: str | None = Depends(request_project),
+):
     body: dict[str, Any] = await request.json()
     requested = str(body.get("model") or "")
     if not requested:
@@ -87,7 +92,9 @@ async def messages(request: Request, key: HubKey = Depends(enforce_quotas)):
             "error" if outcome.error else "ok",
             str(outcome.error) if outcome.error else None,
             endpoint=_ENDPOINT,
-            route=outcome.meta.get("route") or {"attempts": getattr(outcome.error, "attempts", None) or []},
+            route={"attempts": getattr(outcome.error, "attempts", None) or []},
+            meta=outcome.meta,
+            project=project,
         )
 
     if body.get("stream"):

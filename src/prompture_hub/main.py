@@ -168,7 +168,7 @@ def cli(argv: list[str] | None = None) -> None:
     import argparse
     import sys
 
-    from .setup_tools import TOOLS, build_plan, create_setup_key
+    from .setup_tools import TOOLS, build_plan, create_setup_key, resolve_project_arg
 
     parser = argparse.ArgumentParser(prog="prompture-hub")
     sub = parser.add_subparsers(dest="command")
@@ -181,6 +181,11 @@ def cli(argv: list[str] | None = None) -> None:
     setup.add_argument("--small-model", default=None, help="Model for background/fast calls (default: --model).")
     setup.add_argument("--base-url", default=None, help="Hub URL (default: HUB_BASE_URL).")
     setup.add_argument("--write", action="store_true", help="Write the tool's config file where supported.")
+    setup.add_argument(
+        "--project",
+        default=None,
+        help="Attribute this tool's spend to a project (X-Project header). '.' uses the current folder name.",
+    )
 
     args = parser.parse_args(sys.argv[1:] if argv is None else argv)
     if args.command in (None, "serve"):
@@ -188,15 +193,18 @@ def cli(argv: list[str] | None = None) -> None:
         return
 
     key = args.key
+    project = resolve_project_arg(args.project)
     if args.create_key:
-        key = create_setup_key(args.tool)
-        print(f"# Created hub key 'setup:{args.tool}' - shown once, store it now.\n")
+        key = create_setup_key(args.tool, project)
+        label = f"setup:{args.tool}:{project}" if project else f"setup:{args.tool}"
+        print(f"# Created hub key '{label}' - shown once, store it now.\n")
     plan = build_plan(
         args.tool,
         base_url=args.base_url or get_settings().base_url,
         key=key,
         model=args.model,
         small_model=args.small_model,
+        project=project,
     )
     print(plan.render())
     if args.write:

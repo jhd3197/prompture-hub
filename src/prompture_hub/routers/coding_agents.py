@@ -30,10 +30,11 @@ from fastapi import APIRouter, Depends, HTTPException, status
 from fastapi.responses import StreamingResponse
 from pydantic import BaseModel, Field
 
+from .. import metering
+from ..metering import request_project
 from ..quotas import enforce_quotas
 from ..settings import get_settings
-from ..storage.db import get_session
-from ..storage.models import HubKey, UsageRecord
+from ..storage.models import HubKey
 
 router = APIRouter()
 
@@ -313,6 +314,7 @@ def execute_run(body: RunAgentRequest) -> tuple[dict[str, Any], int, int, float]
 async def run_agent(
     body: RunAgentRequest,
     key: HubKey = Depends(enforce_quotas),
+    project: str | None = Depends(request_project),
 ):
     endpoint = "/v1/coding-agents/run"
 
@@ -336,6 +338,7 @@ async def run_agent(
                     int(totals["elapsed_ms"]),
                     str(totals["status"]),
                     totals.get("error"),
+                    project,
                 )
 
         return StreamingResponse(
@@ -355,7 +358,7 @@ async def run_agent(
         elapsed_ms = int((time.perf_counter() - started) * 1000)
         _record(
             key.id, body.agent, endpoint, 0, 0, 0.0, elapsed_ms,
-            "error", str(exc.detail),
+            "error", str(exc.detail), project,
         )
         raise
 
@@ -366,6 +369,7 @@ async def run_agent(
         prompt_tok, completion_tok, cost, elapsed_ms,
         run_status,
         response["output"][:500] if run_status == "error" else None,
+        project,
     )
     return response
 
@@ -380,20 +384,17 @@ def _record(
     elapsed_ms: int,
     status_str: str,
     error: str | None,
+    project: str | None = None,
 ) -> None:
-    with get_session() as session:
-        session.add(
-            UsageRecord(
-                key_id=key_id,
-                model=model,
-                endpoint=endpoint,
-                prompt_tokens=prompt_tok,
-                completion_tokens=completion_tok,
-                total_tokens=prompt_tok + completion_tok,
-                cost_usd=cost,
-                latency_ms=elapsed_ms,
-                status=status_str,
-                error=error,
-            )
-        )
-        session.commit()
+    metering.record(
+        key_id=key_id,
+        model=model,
+        endpoint=endpoint,
+        prompt_tokens=prompt_tok,
+        completion_tokens=completion_tok,
+        cost=cost,
+        latency_ms=elapsed_ms,
+        status=status_str,
+        error=error,
+        project=project,
+    )

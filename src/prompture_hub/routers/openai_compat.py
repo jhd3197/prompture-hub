@@ -36,11 +36,13 @@ from prompture.gateway import (
 )
 from pydantic import BaseModel, ConfigDict
 
+from .. import metering
 from ..auth import require_hub_key
+from ..metering import request_project
 from ..pipeline import after_turn, prepare_messages
 from ..quotas import enforce_quotas
 from ..storage.db import get_session
-from ..storage.models import Conversation, HubKey, UsageRecord
+from ..storage.models import Conversation, HubKey
 from .conversations import append_messages, load_history
 
 router = APIRouter()
@@ -137,6 +139,7 @@ def _persist(body: ChatCompletionsRequest, outcome: ChatOutcome) -> None:
 async def chat_completions(
     body: ChatCompletionsRequest,
     key: HubKey = Depends(enforce_quotas),
+    project: str | None = Depends(request_project),
 ):
     messages, options = _gate_and_prepare(body, key)
 
@@ -145,18 +148,18 @@ async def chat_completions(
     driver = get_driver_for_model(body.model)
 
     if body.stream:
-        return _stream_response(driver, body, key, messages, options)
+        return _stream_response(driver, body, key, messages, options, project)
 
     started = time.perf_counter()
     try:
         outcome = await run_in_threadpool(run_chat, driver, messages, options, tools=body.tools)
     except NotImplementedError as exc:
-        _record(key.id, body.model, 0, 0, 0.0, 0, "error", str(exc))
+        _record(key.id, body.model, 0, 0, 0.0, 0, "error", str(exc), project=project)
         raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail=str(exc)) from exc
     except Exception as exc:
         # A resilient route that ran out of targets carries its attempt trace.
         route = {"attempts": getattr(exc, "attempts", None) or []}
-        _record(key.id, body.model, 0, 0, 0.0, 0, "error", str(exc), route=route)
+        _record(key.id, body.model, 0, 0, 0.0, 0, "error", str(exc), route=route, project=project)
         raise HTTPException(status_code=status.HTTP_502_BAD_GATEWAY, detail=str(exc)) from exc
 
     after_turn(outcome)
@@ -164,7 +167,7 @@ async def chat_completions(
     _record(
         key.id, body.model, usage["prompt_tokens"], usage["completion_tokens"],
         outcome.cost, int((time.perf_counter() - started) * 1000), "ok", None,
-        route=outcome.meta.get("route"),
+        meta=outcome.meta, project=project,
     )
     _persist(body, outcome)
     return outcome.to_completion(body.model, extra={"conversation_id": body.conversation_id})
@@ -181,6 +184,7 @@ def _stream_response(
     key: HubKey,
     messages: list[dict[str, Any]],
     options: dict[str, Any],
+    project: str | None = None,
 ) -> StreamingResponse:
     # Every Prompture driver inherits ``generate_messages_stream`` (it raises
     # NotImplementedError), so the capability flag is the real signal.
@@ -210,12 +214,12 @@ def _stream_response(
         if outcome.error is not None:
             _record(
                 key.id, body.model, usage["prompt_tokens"], usage["completion_tokens"],
-                outcome.cost, elapsed, "error", str(outcome.error),
+                outcome.cost, elapsed, "error", str(outcome.error), meta=outcome.meta, project=project,
             )
             return
         _record(
             key.id, body.model, usage["prompt_tokens"], usage["completion_tokens"],
-            outcome.cost, elapsed, "ok", None, route=outcome.meta.get("route"),
+            outcome.cost, elapsed, "ok", None, meta=outcome.meta, project=project,
         )
         _persist(body, outcome)
 
@@ -251,7 +255,11 @@ class EmbeddingsRequest(BaseModel):
 
 
 @router.post("/embeddings")
-async def embeddings(body: EmbeddingsRequest, key: HubKey = Depends(enforce_quotas)) -> dict[str, Any]:
+async def embeddings(
+    body: EmbeddingsRequest,
+    key: HubKey = Depends(enforce_quotas),
+    project: str | None = Depends(request_project),
+) -> dict[str, Any]:
     if key.allowed_models and body.model not in key.allowed_models:
         raise HTTPException(
             status_code=status.HTTP_403_FORBIDDEN,
@@ -273,14 +281,14 @@ async def embeddings(body: EmbeddingsRequest, key: HubKey = Depends(enforce_quot
     try:
         result = await driver.embed(inputs, options)
     except Exception as exc:
-        _record(key.id, body.model, 0, 0, 0.0, 0, "error", str(exc), endpoint="/v1/embeddings")
+        _record(key.id, body.model, 0, 0, 0.0, 0, "error", str(exc), endpoint="/v1/embeddings", project=project)
         raise HTTPException(status_code=status.HTTP_502_BAD_GATEWAY, detail=str(exc)) from exc
 
     meta = result.get("meta", {}) or {}
     tokens = int(meta.get("total_tokens", meta.get("prompt_tokens", 0)) or 0)
     _record(
         key.id, body.model, tokens, 0, float(meta.get("cost", 0.0) or 0.0),
-        int((time.perf_counter() - started) * 1000), "ok", None, endpoint="/v1/embeddings",
+        int((time.perf_counter() - started) * 1000), "ok", None, endpoint="/v1/embeddings", project=project,
     )
     return {
         "object": "list",
@@ -318,24 +326,24 @@ def _record(
     error: str | None,
     endpoint: str = _ENDPOINT,
     route: dict[str, Any] | None = None,
+    *,
+    meta: dict[str, Any] | None = None,
+    project: str | None = None,
 ) -> None:
-    served_by = (route or {}).get("served_by")
-    attempts = sum(1 for a in (route or {}).get("attempts", []) if a.get("outcome") in ("ok", "error"))
-    with get_session() as session:
-        session.add(
-            UsageRecord(
-                key_id=key_id,
-                model=model,
-                endpoint=endpoint,
-                prompt_tokens=prompt_tok,
-                completion_tokens=completion_tok,
-                total_tokens=prompt_tok + completion_tok,
-                cost_usd=cost,
-                latency_ms=elapsed_ms,
-                status=status_str,
-                error=error,
-                served_by=served_by,
-                attempts=max(attempts, 1),
-            )
-        )
-        session.commit()
+    """Meter one call. Pass the driver ``meta`` when there is one; ``route``
+    alone covers failures that only carry an attempt trace."""
+    if route is not None and not (meta or {}).get("route"):
+        meta = {**(meta or {}), "route": route}
+    metering.record(
+        key_id=key_id,
+        model=model,
+        endpoint=endpoint,
+        prompt_tokens=prompt_tok,
+        completion_tokens=completion_tok,
+        cost=cost,
+        latency_ms=elapsed_ms,
+        status=status_str,
+        error=error,
+        project=project,
+        meta=meta,
+    )

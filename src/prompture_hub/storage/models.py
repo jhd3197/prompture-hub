@@ -63,6 +63,10 @@ class HubKey(SQLModel, table=True):
     created_at: datetime = Field(default_factory=_utcnow)
     revoked_at: datetime | None = Field(default=None, index=True)
     user_id: int | None = Field(default=None, index=True, foreign_key="user.id")
+    default_project: str | None = Field(
+        default=None,
+        description="Project a call is attributed to when the request sends no X-Project header.",
+    )
 
 
 class UsageRecord(SQLModel, table=True):
@@ -87,6 +91,7 @@ class UsageRecord(SQLModel, table=True):
         description="Model that actually answered (differs from ``model`` for combos / fallbacks).",
     )
     attempts: int = Field(default=1, description="Upstream attempts, including retries and fallbacks.")
+    project: str | None = Field(default=None, index=True, description="Project label (X-Project header or key default).")
     timestamp: datetime = Field(default_factory=_utcnow, index=True)
 
 

@@ -25,6 +25,7 @@ from prompture.gateway import (
     stream_responses_events,
 )
 
+from ..metering import request_project
 from ..pipeline import after_turn, prepare_messages
 from ..quotas import enforce_quotas
 from ..storage.models import HubKey
@@ -36,7 +37,11 @@ _ENDPOINT = "/v1/responses"
 
 
 @router.post("/responses")
-async def responses(request: Request, key: HubKey = Depends(enforce_quotas)):
+async def responses(
+    request: Request,
+    key: HubKey = Depends(enforce_quotas),
+    project: str | None = Depends(request_project),
+):
     body: dict[str, Any] = await request.json()
     model = str(body.get("model") or "")
     if not model:
@@ -68,7 +73,9 @@ async def responses(request: Request, key: HubKey = Depends(enforce_quotas)):
             "error" if outcome.error else "ok",
             str(outcome.error) if outcome.error else None,
             endpoint=_ENDPOINT,
-            route=outcome.meta.get("route") or {"attempts": getattr(outcome.error, "attempts", None) or []},
+            route={"attempts": getattr(outcome.error, "attempts", None) or []},
+            meta=outcome.meta,
+            project=project,
         )
 
     if body.get("stream"):
