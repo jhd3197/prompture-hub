@@ -18,6 +18,9 @@ export interface HubKey {
   created_at: string;
   revoked_at: string | null;
   active: boolean;
+  allowed_ips?: string[];
+  expires_at?: string | null;
+  expired?: boolean;
   prefix?: string;
 }
 
@@ -32,6 +35,8 @@ export interface UsageRow {
   cost_usd: number;
   latency_ms: number;
   status: string;
+  served_by?: string | null;
+  attempts?: number;
   timestamp: string;
 }
 
@@ -154,4 +159,35 @@ export interface ConversationDetail {
     message_count: number;
   };
   messages: ConversationMessage[];
+}
+
+export interface AnalyticsBucket {
+  requests: number;
+  errors: number;
+  blocked: number;
+  error_rate: number;
+  cost_usd: number;
+  tokens: number;
+  p50_latency_ms: number | null;
+  p95_latency_ms: number | null;
+  fallbacks: number;
+  fallback_rate: number;
+}
+
+export interface Analytics {
+  range: { start: string; end: string; days: number };
+  totals: AnalyticsBucket;
+  by_day: Array<AnalyticsBucket & { date: string }>;
+  by_model: Array<AnalyticsBucket & { model: string }>;
+  by_provider: Array<AnalyticsBucket & { provider: string }>;
+  by_key: Array<AnalyticsBucket & { key_id: number; name: string }>;
+  recent_errors: Array<{
+    timestamp: string;
+    model: string;
+    served_by: string | null;
+    key_id: number;
+    key_name: string | null;
+    endpoint: string;
+    error: string;
+  }>;
 }

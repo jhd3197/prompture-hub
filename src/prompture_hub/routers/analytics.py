@@ -56,7 +56,9 @@ class _Bucket:
         self.tokens += u.total_tokens or 0
         if u.status == "ok" and u.latency_ms:
             self.latencies.append(u.latency_ms)
-        if (u.attempts or 1) > 1 or (u.served_by and u.served_by != u.model):
+        # A combo is always served by one of its members, so a different
+        # served_by alone isn't a fallback — needing a second attempt is.
+        if (u.attempts or 1) > 1:
             self.fallbacks += 1
 
     def to_dict(self) -> dict[str, Any]:
