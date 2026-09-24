@@ -38,6 +38,8 @@ The untrusted app never sees `OPENAI_API_KEY` (or any other real provider secret
 pip install prompture-hub
 ```
 
+Already using Prompture? `pip install "prompture[hub]"` installs the same thing, and `prompture hub` launches it.
+
 The dashboard UI ships **prebuilt inside the package** — no Node, no npm, no checkout required. (Prefer an isolated install? `pipx install prompture-hub`.)
 
 Point it at one provider key and launch:
@@ -109,7 +111,7 @@ The dashboard lives at `http://localhost:1984/` and shows recent keys, recent ca
 
 | Surface | Endpoints | Use case |
 |---|---|---|
-| **OpenAI-compatible** | `/v1/chat/completions`, `/v1/models` | Drop-in for any OpenAI-SDK client. Maximum compatibility. |
+| **OpenAI-compatible** | `/v1/chat/completions`, `/v1/models` | Drop-in for any OpenAI-SDK client: `tools`, `image_url` parts, `response_format` and streaming all pass through. Wire format comes from `prompture.gateway`, so it matches `prompture serve` exactly. |
 | **Prompture-native** | `/v1/extract` | Structured extraction with JSON Schema. Exposes Prompture's `ask_for_json` + strategies (`provider_native`, `tool_call`, `prompted_repair`) over HTTP. |
 | **Sessions** | `/v1/conversations` (CRUD) + `conversation_id` on `/v1/chat/completions` | Resumable chat: a later request replays prior turns server-side so the client doesn't need to ship full history. |
 
@@ -276,10 +278,15 @@ The Vite dev server proxies all backend paths (`/api`, `/auth`, `/v1`, `/admin`,
 
 ## Roadmap
 
-- **v0.1** — scaffold, OpenAI-compat (non-streaming), extract, scoped keys, embedded Jinja dashboard
-- **v0.2** — SSE streaming, /v1/embeddings, rate-limit middleware, key creation UI form, React frontend matching CachiBot's stack
-- **v0.3** — multi-user (`/admin/users`, OAuth admin, per-user key namespacing)
-- **v0.4** — hosted-ready (Docker image, Postgres backend, public deploy guide, audit log)
+**Shipped:** OpenAI-compatible chat (streaming, tools, vision, `response_format`), `/v1/extract`, scoped keys with model allowlists, spend caps and rate limits, resumable conversations, coding-agent runner, React dashboard, Google/GitHub OAuth, Alembic migrations, PyPI releases.
+
+**Next:**
+- Resilient routing — fallback chains and key rotation from `prompture.resilience`, with a per-call route trace in the dashboard
+- Analytics — usage, cost, latency and error breakdowns per key / model / provider
+- Key policies — IP allowlists and expiry
+- `prompture-hub setup <tool>` — write config for Claude Code, Codex, Cursor, Aider and friends to point at the hub
+- More surfaces — `/v1/embeddings`, Anthropic `/v1/messages`, `/v1/responses`
+- Multi-user and hosted deployments — Postgres backend, audit log
 
 ## License
 
