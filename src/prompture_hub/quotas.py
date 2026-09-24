@@ -28,6 +28,7 @@ from __future__ import annotations
 from datetime import datetime, timedelta, timezone
 
 from fastapi import Depends, HTTPException, Request, status
+from prompture.companion import window_start
 from sqlalchemy import func
 from sqlmodel import select
 
@@ -42,32 +43,8 @@ STATUS_RATE_LIMITED = "rate_limited"
 
 
 def _window_start(period: str) -> datetime:
-    """First UTC instant of the current cap window for ``period``.
-
-    - ``day``   → UTC midnight today
-    - ``week``  → most recent Monday 00:00 UTC (ISO weeks start Monday)
-    - ``month`` → 1st of the current UTC month at 00:00
-    """
-    now = datetime.now(timezone.utc)
-    p = (period or "day").lower()
-    if p == "week":
-        monday = now - timedelta(days=now.weekday())
-        return monday.replace(hour=0, minute=0, second=0, microsecond=0)
-    if p == "month":
-        return now.replace(day=1, hour=0, minute=0, second=0, microsecond=0)
-    # default: day
-    return now.replace(hour=0, minute=0, second=0, microsecond=0)
-
-
-def window_end(period: str) -> datetime:
-    """When the current cap window for ``period`` resets (exclusive end)."""
-    start = _window_start(period)
-    p = (period or "day").lower()
-    if p == "week":
-        return start + timedelta(days=7)
-    if p == "month":
-        return (start + timedelta(days=32)).replace(day=1)
-    return start + timedelta(days=1)
+    """First UTC instant of the current cap window: day, week (Monday) or month."""
+    return window_start(period)
 
 
 def spend_in_window(key_id: int, period: str) -> float:

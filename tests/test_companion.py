@@ -78,7 +78,10 @@ class TestInfo:
     def test_is_public_and_describes_pairing(self):
         body = _client().get("/v1/companion/info").json()
         assert body["service"] == "prompture-hub"
+        assert body["mode"] == "hub"
         assert body["api_version"] == 1
+        assert body["capabilities"]["running_calls"] is True
+        assert body["capabilities"]["key_controls"] is True
         assert "device_pairing" in body["features"]
         assert body["pairing"]["verification_uri"].endswith("/app/pair")
 

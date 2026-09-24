@@ -12,18 +12,18 @@ session. Every figure carries where it came from; nothing is extrapolated.
 
 from __future__ import annotations
 
-from collections import defaultdict
 from datetime import datetime, timezone
 from typing import Any
 
 from fastapi import APIRouter, Depends, Query
 from fastapi.concurrency import run_in_threadpool
+from prompture.companion import UsageRow, summarize_spend, window_end, window_start
 from sqlmodel import select
 
 from ..companion_auth import Principal, require_read, visible_key_ids
 from ..metering import paused_providers
 from ..policies import is_expired
-from ..quotas import _window_start, calls_in_last_minute, spend_in_window, window_end
+from ..quotas import calls_in_last_minute, spend_in_window
 from ..storage.db import get_session
 from ..storage.models import HubKey, UsageRecord, iso_utc
 
@@ -113,58 +113,30 @@ async def limits(
     return body
 
 
-def _bucket() -> dict[str, Any]:
-    return {"requests": 0, "cost_usd": 0.0, "tokens": 0, "errors": 0}
-
-
-def _add(bucket: dict[str, Any], row: UsageRecord) -> None:
-    bucket["requests"] += 1
-    bucket["cost_usd"] += row.cost_usd or 0.0
-    bucket["tokens"] += row.total_tokens or 0
-    if row.status == "error":
-        bucket["errors"] += 1
-
-
-def _ranked(buckets: dict[Any, dict[str, Any]], label: str) -> list[dict[str, Any]]:
-    rows = [{label: k, **v, "cost_usd": round(v["cost_usd"], 6)} for k, v in buckets.items()]
-    return sorted(rows, key=lambda r: (-r["cost_usd"], -r["requests"]))
-
-
 @router.get("/spend")
 def spend(
     principal: Principal = Depends(require_read),
     period: str = Query(default="day", pattern="^(day|week|month)$"),
 ) -> dict[str, Any]:
     """Spend in the current UTC period, split by project, key and model."""
-    start = _window_start(period)
+    start = window_start(period)
     key_ids = visible_key_ids(principal)
     with get_session() as session:
         stmt = select(UsageRecord).where(UsageRecord.timestamp >= start)
         if key_ids is not None:
             stmt = stmt.where(UsageRecord.key_id.in_(key_ids or [-1]))
-        rows = session.exec(stmt).all()
+        records = session.exec(stmt).all()
         names = {k.id: k.name for k in session.exec(select(HubKey)).all()}
-
-    total = _bucket()
-    by_project: dict[str | None, dict[str, Any]] = defaultdict(_bucket)
-    by_key: dict[int, dict[str, Any]] = defaultdict(_bucket)
-    by_model: dict[str, dict[str, Any]] = defaultdict(_bucket)
-    for row in rows:
-        _add(total, row)
-        _add(by_project[row.project], row)
-        _add(by_key[row.key_id], row)
-        _add(by_model[row.served_by or row.model], row)
-
-    keys = _ranked(by_key, "key_id")
-    for item in keys:
-        item["name"] = names.get(item["key_id"], f"key {item['key_id']}")
-    total["cost_usd"] = round(total["cost_usd"], 6)
-    return {
-        "period": period,
-        "start": iso_utc(start),
-        "resets_at": iso_utc(window_end(period)),
-        "total": total,
-        "by_project": _ranked(by_project, "project"),
-        "by_key": keys,
-        "by_model": _ranked(by_model, "model"),
-    }
+    rows = [
+        UsageRow(
+            model=r.model,
+            cost_usd=r.cost_usd or 0.0,
+            tokens=r.total_tokens or 0,
+            status=r.status,
+            served_by=r.served_by,
+            project=r.project,
+            key_id=r.key_id,
+        )
+        for r in records
+    ]
+    return summarize_spend(rows, period, key_names=names)

@@ -95,7 +95,7 @@ class TestBus:
         assert bus.last_id() == 3
 
     def test_abandoned_calls_expire(self, monkeypatch):
-        from prompture_hub import live
+        from prompture.companion import live
 
         bus = live.get_bus()
         bus.publish("request.started", {"request_id": "old", "key_id": 1})

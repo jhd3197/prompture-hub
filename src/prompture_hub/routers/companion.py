@@ -25,7 +25,6 @@ needs no password on the device and works the same for a remote hub.
 from __future__ import annotations
 
 import asyncio
-import json
 import secrets
 from collections.abc import AsyncIterator
 from datetime import datetime, timedelta, timezone
@@ -33,6 +32,7 @@ from typing import Any
 
 from fastapi import APIRouter, Depends, HTTPException, Query, Request, Response, status
 from fastapi.responses import JSONResponse, StreamingResponse
+from prompture.companion import COMPANION_API_VERSION
 from pydantic import BaseModel, Field
 from sqlalchemy import func
 from sqlmodel import select
@@ -46,16 +46,13 @@ from ..companion_auth import (
     require_read,
     visible_key_ids,
 )
-from ..live import get_bus, visible
+from ..live import get_bus, sse_event, visible
 from ..settings import get_settings
 from ..storage.db import get_session
 from ..storage.models import DevicePairing, DeviceToken, User, iso_utc
 
 router = APIRouter()
 dashboard_router = APIRouter()
-
-#: Bumped when a companion-facing endpoint changes incompatibly.
-COMPANION_API_VERSION = 1
 
 #: Features a companion can rely on, by name. Endpoints add themselves here.
 FEATURES: dict[str, str] = {
@@ -66,6 +63,15 @@ FEATURES: dict[str, str] = {
     "alerts": "/v1/alerts",
     "key_controls": "/v1/keys/{id}",
     "provider_controls": "/v1/providers/{name}",
+}
+
+#: What this hub adds over the local companion (``prompture companion``).
+CAPABILITIES: dict[str, bool] = {
+    "running_calls": True,
+    "projects": True,
+    "key_controls": True,
+    "provider_controls": True,
+    "alert_rules": True,
 }
 
 #: Seconds between SSE keep-alive comments on an idle live stream.
@@ -125,9 +131,11 @@ def companion_info() -> dict[str, Any]:
     base = get_settings().base_url.rstrip("/")
     return {
         "service": "prompture-hub",
+        "mode": "hub",
         "version": __version__,
         "api_version": COMPANION_API_VERSION,
         "features": dict(FEATURES),
+        "capabilities": dict(CAPABILITIES),
         "pairing": {
             "device_authorization_endpoint": "/v1/companion/device/code",
             "token_endpoint": "/v1/companion/device/token",
@@ -236,15 +244,6 @@ async def device_token(request: Request) -> Any:
 # ---------------------------------------------------------------------------
 
 
-def _sse_event(event: dict[str, Any]) -> str:
-    lines = []
-    if "id" in event:
-        lines.append(f"id: {event['id']}")
-    lines.append(f"event: {event['type']}")
-    lines.append("data: " + json.dumps(event, separators=(",", ":"), default=str))
-    return "\n".join(lines) + "\n\n"
-
-
 @router.get("/live")
 async def live_stream(
     request: Request,
@@ -279,7 +278,7 @@ async def live_stream(
             if not visible(event, key_ids):
                 return None
             count += 1
-            return _sse_event(event)
+            return sse_event(event)
 
         try:
             yield "retry: 3000\n\n"
@@ -305,7 +304,7 @@ async def live_stream(
                     continue
                 if sub.overflowed:
                     sub.overflowed = False
-                    yield _sse_event({"type": "resync", "reason": "client fell behind"})
+                    yield sse_event({"type": "resync", "reason": "client fell behind"})
                 chunk = emit(event)
                 if chunk:
                     yield chunk
