@@ -4,6 +4,7 @@
   Prompture's driver registry. Supports ``tools``, multimodal ``image_url``
   parts and ``response_format``. ``stream: true`` returns an SSE stream of
   OpenAI chunks terminated by ``data: [DONE]``.
+- ``POST /v1/embeddings`` — Prompture's embedding drivers, metered per key.
 - ``GET  /v1/models`` — lists models the calling key is allowed to use.
 
 Request/response shaping lives in :mod:`prompture.gateway`; this module only
@@ -230,6 +231,60 @@ def _stream_response(
         yield SSE_DONE
 
     return StreamingResponse(event_gen(), media_type="text/event-stream", headers=SSE_HEADERS)
+
+
+# ---------------------------------------------------------------------------
+# Embeddings
+# ---------------------------------------------------------------------------
+
+
+class EmbeddingsRequest(BaseModel):
+    model_config = ConfigDict(extra="allow")
+
+    model: str
+    input: str | list[str]
+    encoding_format: str | None = None
+    dimensions: int | None = None
+
+
+@router.post("/embeddings")
+async def embeddings(body: EmbeddingsRequest, key: HubKey = Depends(enforce_quotas)) -> dict[str, Any]:
+    if key.allowed_models and body.model not in key.allowed_models:
+        raise HTTPException(
+            status_code=status.HTTP_403_FORBIDDEN,
+            detail=f"Model '{body.model}' is not in this key's allowed_models whitelist.",
+        )
+    from prompture.drivers.embedding_registry import get_async_embedding_driver_for_model
+
+    try:
+        driver = get_async_embedding_driver_for_model(body.model)
+    except Exception as exc:
+        raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail=f"Unknown embedding model: {exc}") from exc
+
+    inputs = body.input if isinstance(body.input, list) else [body.input]
+    options: dict[str, Any] = {}
+    if body.dimensions is not None:
+        options["dimensions"] = body.dimensions
+
+    started = time.perf_counter()
+    try:
+        result = await driver.embed(inputs, options)
+    except Exception as exc:
+        _record(key.id, body.model, 0, 0, 0.0, 0, "error", str(exc), endpoint="/v1/embeddings")
+        raise HTTPException(status_code=status.HTTP_502_BAD_GATEWAY, detail=str(exc)) from exc
+
+    meta = result.get("meta", {}) or {}
+    tokens = int(meta.get("total_tokens", meta.get("prompt_tokens", 0)) or 0)
+    _record(
+        key.id, body.model, tokens, 0, float(meta.get("cost", 0.0) or 0.0),
+        int((time.perf_counter() - started) * 1000), "ok", None, endpoint="/v1/embeddings",
+    )
+    return {
+        "object": "list",
+        "data": [{"object": "embedding", "embedding": vec, "index": i} for i, vec in enumerate(result["embeddings"])],
+        "model": meta.get("model_name", body.model),
+        "usage": {"prompt_tokens": tokens, "total_tokens": tokens},
+    }
 
 
 # ---------------------------------------------------------------------------

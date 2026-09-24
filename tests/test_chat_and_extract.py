@@ -269,3 +269,25 @@ def test_chat_passes_tools_and_returns_tool_calls(monkeypatch):
     assert driver.seen_tools == tools
     assert driver.seen_options["tool_choice"] == "auto"
     assert driver.seen_options["json_mode"] is True
+
+
+def test_embeddings_metered(monkeypatch):
+    class _Emb:
+        async def embed(self, texts, options):
+            return {"embeddings": [[0.1, 0.2] for _ in texts], "meta": {"total_tokens": 6, "cost": 0.001, "model_name": "stub/emb"}}
+
+    import prompture.drivers.embedding_registry as reg
+
+    monkeypatch.setattr(reg, "get_async_embedding_driver_for_model", lambda m: _Emb())
+    key = _create_key()
+    r = _client().post(
+        "/v1/embeddings",
+        headers={"Authorization": f"Bearer {key}"},
+        json={"model": "stub/model", "input": ["a", "b"]},
+    )
+    assert r.status_code == 200, r.text
+    body = r.json()
+    assert [d["index"] for d in body["data"]] == [0, 1]
+    assert body["usage"] == {"prompt_tokens": 6, "total_tokens": 6}
+    rows = [u for u in _usage_rows() if u.endpoint == "/v1/embeddings"]
+    assert len(rows) == 1 and rows[0].cost_usd == pytest.approx(0.001)
