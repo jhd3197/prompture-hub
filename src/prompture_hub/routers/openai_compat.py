@@ -150,16 +150,17 @@ async def chat_completions(
     if body.stream:
         return _stream_response(driver, body, key, messages, options, project)
 
+    call = metering.begin(key, body.model, _ENDPOINT, project)
     started = time.perf_counter()
     try:
         outcome = await run_in_threadpool(run_chat, driver, messages, options, tools=body.tools)
     except NotImplementedError as exc:
-        _record(key.id, body.model, 0, 0, 0.0, 0, "error", str(exc), project=project)
+        _record(key.id, body.model, 0, 0, 0.0, 0, "error", str(exc), project=project, call=call)
         raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail=str(exc)) from exc
     except Exception as exc:
         # A resilient route that ran out of targets carries its attempt trace.
         route = {"attempts": getattr(exc, "attempts", None) or []}
-        _record(key.id, body.model, 0, 0, 0.0, 0, "error", str(exc), route=route, project=project)
+        _record(key.id, body.model, 0, 0, 0.0, 0, "error", str(exc), route=route, project=project, call=call)
         raise HTTPException(status_code=status.HTTP_502_BAD_GATEWAY, detail=str(exc)) from exc
 
     after_turn(outcome)
@@ -167,7 +168,7 @@ async def chat_completions(
     _record(
         key.id, body.model, usage["prompt_tokens"], usage["completion_tokens"],
         outcome.cost, int((time.perf_counter() - started) * 1000), "ok", None,
-        meta=outcome.meta, project=project,
+        meta=outcome.meta, project=project, call=call,
     )
     _persist(body, outcome)
     return outcome.to_completion(body.model, extra={"conversation_id": body.conversation_id})
@@ -205,6 +206,7 @@ def _stream_response(
             detail="Streaming with tools is not supported yet. Retry with stream=false.",
         )
 
+    call = metering.begin(key, body.model, _ENDPOINT, project, stream=True)
     started = time.perf_counter()
 
     def on_complete(outcome: ChatOutcome) -> None:
@@ -214,12 +216,12 @@ def _stream_response(
         if outcome.error is not None:
             _record(
                 key.id, body.model, usage["prompt_tokens"], usage["completion_tokens"],
-                outcome.cost, elapsed, "error", str(outcome.error), meta=outcome.meta, project=project,
+                outcome.cost, elapsed, "error", str(outcome.error), meta=outcome.meta, project=project, call=call,
             )
             return
         _record(
             key.id, body.model, usage["prompt_tokens"], usage["completion_tokens"],
-            outcome.cost, elapsed, "ok", None, meta=outcome.meta, project=project,
+            outcome.cost, elapsed, "ok", None, meta=outcome.meta, project=project, call=call,
         )
         _persist(body, outcome)
 
@@ -233,9 +235,13 @@ def _stream_response(
             include_usage=include_usage,
             on_complete=on_complete,
         )
-        for chunk in chunks:
-            yield sse(chunk)
-        yield SSE_DONE
+        try:
+            for chunk in chunks:
+                call.mark_first_token()
+                yield sse(chunk)
+            yield SSE_DONE
+        finally:
+            call.close()
 
     return StreamingResponse(event_gen(), media_type="text/event-stream", headers=SSE_HEADERS)
 
@@ -277,11 +283,14 @@ async def embeddings(
     if body.dimensions is not None:
         options["dimensions"] = body.dimensions
 
+    call = metering.begin(key, body.model, "/v1/embeddings", project)
     started = time.perf_counter()
     try:
         result = await driver.embed(inputs, options)
     except Exception as exc:
-        _record(key.id, body.model, 0, 0, 0.0, 0, "error", str(exc), endpoint="/v1/embeddings", project=project)
+        _record(
+            key.id, body.model, 0, 0, 0.0, 0, "error", str(exc), endpoint="/v1/embeddings", project=project, call=call
+        )
         raise HTTPException(status_code=status.HTTP_502_BAD_GATEWAY, detail=str(exc)) from exc
 
     meta = result.get("meta", {}) or {}
@@ -289,6 +298,7 @@ async def embeddings(
     _record(
         key.id, body.model, tokens, 0, float(meta.get("cost", 0.0) or 0.0),
         int((time.perf_counter() - started) * 1000), "ok", None, endpoint="/v1/embeddings", project=project,
+        call=call,
     )
     return {
         "object": "list",
@@ -329,6 +339,7 @@ def _record(
     *,
     meta: dict[str, Any] | None = None,
     project: str | None = None,
+    call: metering.Call | None = None,
 ) -> None:
     """Meter one call. Pass the driver ``meta`` when there is one; ``route``
     alone covers failures that only carry an attempt trace."""
@@ -346,4 +357,5 @@ def _record(
         error=error,
         project=project,
         meta=meta,
+        call=call,
     )

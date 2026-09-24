@@ -31,6 +31,7 @@ from prompture.gateway import (
     stream_anthropic_events,
 )
 
+from .. import metering
 from ..auth import require_hub_key
 from ..metering import request_project
 from ..pipeline import after_turn, prepare_messages
@@ -81,6 +82,7 @@ async def messages(
     from prompture.drivers import get_driver_for_model
 
     driver = get_driver_for_model(model)
+    call = metering.begin(key, requested, _ENDPOINT, project, stream=bool(body.get("stream")))
     started = time.perf_counter()
 
     def record(outcome: ChatOutcome) -> None:
@@ -95,6 +97,7 @@ async def messages(
             route={"attempts": getattr(outcome.error, "attempts", None) or []},
             meta=outcome.meta,
             project=project,
+            call=call,
         )
 
     if body.get("stream"):
@@ -102,8 +105,13 @@ async def messages(
             events = stream_anthropic_events(
                 live_events_for(driver, msgs, tools, options), model=requested, on_complete=record,
             )
-            for name, data in events:
-                yield anthropic_sse(name, data)
+            try:
+                for name, data in events:
+                    if name == "content_block_delta":
+                        call.mark_first_token()
+                    yield anthropic_sse(name, data)
+            finally:
+                call.close()
 
         return StreamingResponse(event_gen(), media_type="text/event-stream", headers=SSE_HEADERS)
 

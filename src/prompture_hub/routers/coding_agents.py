@@ -320,15 +320,21 @@ async def run_agent(
 
     if body.stream:
         cwd = precheck_stream(body)
+        call = metering.begin(key, body.agent, endpoint, project, stream=True)
 
         async def gen():
             totals: dict[str, Any] | None = None
-            async for line, t in stream_run(body, cwd):
-                if t is not None:
-                    totals = t
-                    continue
-                if line:
-                    yield line
+            try:
+                async for line, t in stream_run(body, cwd):
+                    if t is not None:
+                        totals = t
+                        continue
+                    if line:
+                        _track_agent_line(call, line)
+                        yield line
+            finally:
+                if totals is None:
+                    call.close()
             if totals is not None:
                 _record(
                     key.id, body.agent, endpoint,
@@ -339,6 +345,7 @@ async def run_agent(
                     str(totals["status"]),
                     totals.get("error"),
                     project,
+                    call,
                 )
 
         return StreamingResponse(
@@ -351,6 +358,7 @@ async def run_agent(
             },
         )
 
+    call = metering.begin(key, body.agent, endpoint, project)
     started = time.perf_counter()
     try:
         response, prompt_tok, completion_tok, cost = execute_run(body)
@@ -358,7 +366,7 @@ async def run_agent(
         elapsed_ms = int((time.perf_counter() - started) * 1000)
         _record(
             key.id, body.agent, endpoint, 0, 0, 0.0, elapsed_ms,
-            "error", str(exc.detail), project,
+            "error", str(exc.detail), project, call,
         )
         raise
 
@@ -370,8 +378,30 @@ async def run_agent(
         run_status,
         response["output"][:500] if run_status == "error" else None,
         project,
+        call,
     )
     return response
+
+
+# Agent event types that mean "the agent is doing something" vs "it wants you".
+_WORKING_EVENTS = {"message", "tool_call", "tool_result", "system"}
+_WAITING_EVENTS = {"question"}
+
+
+def _track_agent_line(call: metering.Call, line: str) -> None:
+    """Mirror an agent's streamed event onto the live stream as activity state."""
+    payload = line[len("data: "):].strip() if line.startswith("data: ") else ""
+    if not payload or payload == '"[DONE]"':
+        return
+    try:
+        etype = json.loads(payload).get("type")
+    except (ValueError, AttributeError):
+        return
+    call.mark_first_token()
+    if etype in _WAITING_EVENTS:
+        call.mark_activity("waiting", etype)
+    elif etype in _WORKING_EVENTS:
+        call.mark_activity("working", etype)
 
 
 def _record(
@@ -385,6 +415,7 @@ def _record(
     status_str: str,
     error: str | None,
     project: str | None = None,
+    call: metering.Call | None = None,
 ) -> None:
     metering.record(
         key_id=key_id,
@@ -397,4 +428,5 @@ def _record(
         status=status_str,
         error=error,
         project=project,
+        call=call,
     )

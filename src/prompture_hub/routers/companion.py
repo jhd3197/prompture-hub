@@ -7,6 +7,11 @@ Public (no credential):
 - ``POST /v1/companion/device/code`` — start a pairing (RFC 8628 §3.1).
 - ``POST /v1/companion/device/token`` — poll for the device token (RFC 8628 §3.4).
 
+Device token (``read`` scope):
+
+- ``GET /v1/live`` — Server-Sent Events of calls starting, producing their
+  first token, changing activity and finishing. Metadata only.
+
 Dashboard (session, see :mod:`..routers.spa_api`):
 
 - ``GET  /api/companion/pairings/{user_code}`` — what is asking to pair.
@@ -19,18 +24,29 @@ needs no password on the device and works the same for a remote hub.
 
 from __future__ import annotations
 
+import asyncio
+import json
 import secrets
+from collections.abc import AsyncIterator
 from datetime import datetime, timedelta, timezone
 from typing import Any
 
-from fastapi import APIRouter, Depends, HTTPException, Request, Response, status
-from fastapi.responses import JSONResponse
+from fastapi import APIRouter, Depends, HTTPException, Query, Request, Response, status
+from fastapi.responses import JSONResponse, StreamingResponse
 from pydantic import BaseModel, Field
 from sqlalchemy import func
 from sqlmodel import select
 
 from ..auth import require_user
-from ..companion_auth import generate_device_token, hash_secret, normalize_scopes
+from ..companion_auth import (
+    Principal,
+    generate_device_token,
+    hash_secret,
+    normalize_scopes,
+    require_read,
+    visible_key_ids,
+)
+from ..live import get_bus, visible
 from ..settings import get_settings
 from ..storage.db import get_session
 from ..storage.models import DevicePairing, DeviceToken, User, iso_utc
@@ -42,7 +58,10 @@ dashboard_router = APIRouter()
 COMPANION_API_VERSION = 1
 
 #: Features a companion can rely on, by name. Endpoints add themselves here.
-FEATURES: dict[str, str] = {"device_pairing": "/v1/companion/device/code"}
+FEATURES: dict[str, str] = {"device_pairing": "/v1/companion/device/code", "live": "/v1/live"}
+
+#: Seconds between SSE keep-alive comments on an idle live stream.
+HEARTBEAT_SECONDS = 15.0
 
 DEVICE_CODE_TTL = timedelta(minutes=10)
 POLL_INTERVAL = 5
@@ -202,6 +221,96 @@ async def device_token(request: Request) -> Any:
             "token_type": "Bearer",
             "scope": " ".join(token.scopes),
         }
+
+
+# ---------------------------------------------------------------------------
+# Live stream
+# ---------------------------------------------------------------------------
+
+
+def _sse_event(event: dict[str, Any]) -> str:
+    lines = []
+    if "id" in event:
+        lines.append(f"id: {event['id']}")
+    lines.append(f"event: {event['type']}")
+    lines.append("data: " + json.dumps(event, separators=(",", ":"), default=str))
+    return "\n".join(lines) + "\n\n"
+
+
+@router.get("/live")
+async def live_stream(
+    request: Request,
+    principal: Principal = Depends(require_read),
+    after: int | None = Query(default=None, ge=0, description="Replay buffered events newer than this id."),
+    limit: int | None = Query(default=None, ge=1, le=10000, description="Close after this many events."),
+) -> StreamingResponse:
+    """Stream live call events.
+
+    On connect the client gets either the events it missed (when it sends
+    ``Last-Event-ID`` or ``after``) or a ``snapshot`` of calls still running.
+    If the client falls too far behind, a ``resync`` event tells it to fetch
+    a fresh snapshot by reconnecting without an id.
+    """
+    key_ids = visible_key_ids(principal)
+    bus = get_bus()
+    header_id = request.headers.get("last-event-id")
+    resume = int(header_id) if header_id and header_id.isdigit() else after
+    # Subscribe before reading the buffer so nothing published in between is lost.
+    sub = bus.subscribe()
+
+    async def gen() -> AsyncIterator[str]:
+        sent_id = 0
+        count = 0
+
+        def emit(event: dict[str, Any]) -> str | None:
+            nonlocal sent_id, count
+            if "id" in event:
+                if event["id"] <= sent_id:
+                    return None
+                sent_id = event["id"]
+            if not visible(event, key_ids):
+                return None
+            count += 1
+            return _sse_event(event)
+
+        try:
+            yield "retry: 3000\n\n"
+            if resume is not None:
+                initial = bus.replay(resume)
+            else:
+                sent_id = bus.last_id()
+                running = [e for e in bus.running() if visible(e, key_ids)]
+                initial = [{"type": "snapshot", "running": running, "last_id": sent_id}]
+            for event in initial:
+                chunk = emit(event)
+                if chunk:
+                    yield chunk
+                if limit and count >= limit:
+                    return
+            while True:
+                if await request.is_disconnected():
+                    return
+                try:
+                    event = await asyncio.wait_for(sub.queue.get(), timeout=HEARTBEAT_SECONDS)
+                except TimeoutError:
+                    yield ": keep-alive\n\n"
+                    continue
+                if sub.overflowed:
+                    sub.overflowed = False
+                    yield _sse_event({"type": "resync", "reason": "client fell behind"})
+                chunk = emit(event)
+                if chunk:
+                    yield chunk
+                if limit and count >= limit:
+                    return
+        finally:
+            bus.unsubscribe(sub)
+
+    return StreamingResponse(
+        gen(),
+        media_type="text/event-stream",
+        headers={"Cache-Control": "no-cache, no-transform", "X-Accel-Buffering": "no", "Connection": "keep-alive"},
+    )
 
 
 # ---------------------------------------------------------------------------

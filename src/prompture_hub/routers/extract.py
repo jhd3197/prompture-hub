@@ -57,6 +57,7 @@ async def extract(
     from prompture.extraction.core import ask_for_json
 
     driver = get_driver_for_model(body.model)
+    call = metering.begin(key, body.model, "/v1/extract", project)
     started = time.perf_counter()
     try:
         result = await run_in_threadpool(
@@ -71,7 +72,13 @@ async def extract(
         )
     except Exception as exc:
         metering.record(
-            key_id=key.id, model=body.model, endpoint="/v1/extract", status="error", error=str(exc), project=project
+            key_id=key.id,
+            model=body.model,
+            endpoint="/v1/extract",
+            status="error",
+            error=str(exc),
+            project=project,
+            call=call,
         )
         raise HTTPException(status_code=status.HTTP_502_BAD_GATEWAY, detail=str(exc)) from exc
     elapsed_ms = int((time.perf_counter() - started) * 1000)
@@ -90,6 +97,7 @@ async def extract(
         cost=cost,
         latency_ms=elapsed_ms,
         project=project,
+        call=call,
     )
 
     return {
