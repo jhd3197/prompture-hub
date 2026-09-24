@@ -107,13 +107,29 @@ curl http://localhost:1984/v1/chat/completions \
 
 The dashboard lives at `http://localhost:1984/` and shows recent keys, recent calls, and 24-hour spend.
 
-## Two API surfaces
+## API surfaces
 
 | Surface | Endpoints | Use case |
 |---|---|---|
 | **OpenAI-compatible** | `/v1/chat/completions`, `/v1/models` | Drop-in for any OpenAI-SDK client: `tools`, `image_url` parts, `response_format` and streaming all pass through. Wire format comes from `prompture.gateway`, so it matches `prompture serve` exactly. |
+| **OpenAI Responses** | `/v1/responses` | What Codex CLI speaks. Function calls + streaming; stateless (`previous_response_id` is rejected — send full `input`). |
+| **Anthropic-compatible** | `/v1/messages`, `/v1/messages/count_tokens` | What Claude Code and the Anthropic SDKs speak. Tools + streaming. Bare ids like `claude-sonnet-4-5` route to Prompture's `claude/` driver; anything else (`combo/…`, `auto/…`, `openai/gpt-4o`) works too. Key via `x-api-key` or bearer. |
+| **Embeddings** | `/v1/embeddings` | Prompture's embedding drivers, metered per key. |
 | **Prompture-native** | `/v1/extract` | Structured extraction with JSON Schema. Exposes Prompture's `ask_for_json` + strategies (`provider_native`, `tool_call`, `prompted_repair`) over HTTP. |
 | **Sessions** | `/v1/conversations` (CRUD) + `conversation_id` on `/v1/chat/completions` | Resumable chat: a later request replays prior turns server-side so the client doesn't need to ship full history. |
+
+Every chat surface accepts Prompture's virtual model names — `combo/<name>` fallback chains, `auto/cheap` / `auto/best`, aliases and `fusion/<name>` — so retries, key rotation and failover happen inside the hub. Each usage row records which model actually served the call and how many attempts it took.
+
+### Connect your tools
+
+`prompture-hub setup <tool>` prints exactly what a tool needs to go through the hub (env vars for bash and PowerShell, or a config snippet):
+
+```bash
+prompture-hub setup claude-code --create-key --model combo/chat   # mint a key + print env
+prompture-hub setup claude-code --key ph_... --write               # merge into ~/.claude/settings.json (backed up first)
+prompture-hub setup codex --key ph_... --model auto/best            # ~/.codex/config.toml snippet (Responses API)
+prompture-hub setup aider | cursor | continue | openai | anthropic
+```
 
 ### Resumable sessions
 
@@ -274,19 +290,21 @@ The Vite dev server proxies all backend paths (`/api`, `/auth`, `/v1`, `/admin`,
 - **Hub-issued keys** are 32-byte URL-safe tokens, prefixed `ph_`. Only the SHA-256 hash is stored; plaintext is returned to the caller once at creation.
 - **Admin endpoints** (`/admin/*`) require `Authorization: Bearer $HUB_ADMIN_TOKEN`. Different credential from hub-issued keys — separation of duties.
 - **Real provider keys** (`OPENAI_API_KEY`, etc.) are read directly by Prompture's drivers from environment. They never appear in any HTTP response.
-- **Localhost-only by default**: `HUB_HOST=127.0.0.1`. Public exposure requires reverse proxy + TLS + rate-limit middleware (v0.2).
+- **Per-key policies**: model allowlist, spend cap per day/week/month, rate limit, optional **expiry** and **IP / CIDR allowlist**. `X-Forwarded-For` is only honored with `HUB_TRUST_PROXY_HEADERS=true`.
+- **Localhost-only by default**: `HUB_HOST=127.0.0.1`. Public exposure requires a reverse proxy + TLS.
+
+## Analytics
+
+The dashboard's **Analytics** page (and `GET /api/analytics?days=7|30|90`) shows requests, spend, error rate, p50/p95 latency and fallback rate per day, broken down by requested model, serving provider and hub key, plus the most recent errors.
 
 ## Roadmap
 
-**Shipped:** OpenAI-compatible chat (streaming, tools, vision, `response_format`), `/v1/extract`, scoped keys with model allowlists, spend caps and rate limits, resumable conversations, coding-agent runner, React dashboard, Google/GitHub OAuth, Alembic migrations, PyPI releases.
+**Shipped:** OpenAI chat completions, Responses API and Anthropic Messages API (streaming + tools), embeddings, `/v1/extract`, combos / `auto/` / fusion routing with per-call route metering, scoped keys (model allowlist, spend caps, rate limits, expiry, IP allowlists), analytics dashboard, `setup` command for coding tools, reasoning replay, optional prompt compression, resumable conversations, coding-agent runner, OAuth login, Alembic migrations.
 
 **Next:**
-- Resilient routing — fallback chains and key rotation from `prompture.resilience`, with a per-call route trace in the dashboard
-- Analytics — usage, cost, latency and error breakdowns per key / model / provider
-- Key policies — IP allowlists and expiry
-- `prompture-hub setup <tool>` — write config for Claude Code, Codex, Cursor, Aider and friends to point at the hub
-- More surfaces — `/v1/embeddings`, Anthropic `/v1/messages`, `/v1/responses`
+- Combo / alias management in the dashboard (today: `PROMPTURE_COMBOS_FILE`)
 - Multi-user and hosted deployments — Postgres backend, audit log
+- `previous_response_id` support for `/v1/responses`
 
 ## License
 
