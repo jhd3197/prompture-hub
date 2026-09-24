@@ -151,3 +151,40 @@ class Message(SQLModel, table=True):
     total_tokens: int = Field(default=0)
     cost_usd: float = Field(default=0.0)
     created_at: datetime = Field(default_factory=_utcnow, index=True)
+
+
+class DeviceToken(SQLModel, table=True):
+    """A credential for a desktop companion (or any read-mostly client).
+
+    Minted through device pairing, never shown in the dashboard. ``scopes``
+    is ``["read"]`` or ``["read", "control"]``; control is granted separately
+    because it can change keys and routes.
+    """
+
+    id: int | None = Field(default=None, primary_key=True)
+    name: str = Field(description="Label chosen when the device was approved.")
+    hashed_secret: str = Field(unique=True, index=True)
+    scopes: list[str] = Field(default_factory=lambda: ["read"], sa_column=Column(JSON))
+    user_id: int | None = Field(default=None, index=True, foreign_key="user.id")
+    created_at: datetime = Field(default_factory=_utcnow)
+    last_used_at: datetime | None = Field(default=None)
+    revoked_at: datetime | None = Field(default=None, index=True)
+
+
+class DevicePairing(SQLModel, table=True):
+    """One pending device authorization (RFC 8628 device code + user code)."""
+
+    id: int | None = Field(default=None, primary_key=True)
+    device_code_hash: str = Field(unique=True, index=True)
+    user_code: str = Field(unique=True, index=True)
+    client_name: str | None = Field(default=None)
+    requested_scopes: list[str] = Field(default_factory=lambda: ["read"], sa_column=Column(JSON))
+    status: str = Field(default="pending", description="pending | approved | denied | consumed")
+    approved_name: str | None = Field(default=None)
+    approved_scopes: list[str] = Field(default_factory=list, sa_column=Column(JSON))
+    approved_by: int | None = Field(default=None, foreign_key="user.id")
+    token_id: int | None = Field(default=None, foreign_key="devicetoken.id")
+    interval: int = Field(default=5)
+    last_poll_at: datetime | None = Field(default=None)
+    created_at: datetime = Field(default_factory=_utcnow)
+    expires_at: datetime = Field(index=True)

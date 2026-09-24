@@ -19,6 +19,7 @@ from .routers import (
     analytics,
     anthropic_compat,
     coding_agents,
+    companion,
     conversations,
     extract,
     openai_compat,
@@ -83,6 +84,7 @@ def create_app() -> FastAPI:
     app.include_router(extract.router, prefix="/v1", tags=["prompture-native"])
     app.include_router(conversations.router, prefix="/v1", tags=["conversations"])
     app.include_router(coding_agents.router, prefix="/v1", tags=["coding-agents"])
+    app.include_router(companion.router, prefix="/v1", tags=["companion"])
     app.include_router(admin.router, prefix="/admin", tags=["admin"])
 
     # Auth flow (OAuth redirects need server-side handling).
@@ -91,6 +93,7 @@ def create_app() -> FastAPI:
     # SPA-backing JSON.
     app.include_router(spa_api.router, prefix="/api", tags=["spa"])
     app.include_router(analytics.router, prefix="/api", tags=["spa"])
+    app.include_router(companion.dashboard_router, prefix="/api", tags=["spa"])
 
     @app.get("/health", tags=["meta"])
     def health() -> dict[str, str]:
