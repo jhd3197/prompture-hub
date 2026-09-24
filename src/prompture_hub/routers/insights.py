@@ -102,6 +102,10 @@ async def limits(
         return body
     if accounts:
         body["accounts"] = await run_in_threadpool(_account_limits, 60.0)
+        if body["accounts"]:
+            from ..alerts import evaluate_accounts
+
+            await run_in_threadpool(evaluate_accounts, body["accounts"])
     return body
 
 

@@ -167,6 +167,9 @@ def record(
         # limits belong to the model it named.
         _remember_rate_limits(row.model, meta)
     _publish_finished(row, call, route)
+    from .alerts import evaluate_call
+
+    evaluate_call(row, meta)
     return row
 
 

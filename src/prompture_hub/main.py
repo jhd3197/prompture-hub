@@ -16,6 +16,7 @@ from starlette.middleware.sessions import SessionMiddleware
 from .auth import LoginRequired
 from .routers import (
     admin,
+    alerts_api,
     analytics,
     anthropic_compat,
     coding_agents,
@@ -87,6 +88,7 @@ def create_app() -> FastAPI:
     app.include_router(coding_agents.router, prefix="/v1", tags=["coding-agents"])
     app.include_router(companion.router, prefix="/v1", tags=["companion"])
     app.include_router(insights.router, prefix="/v1", tags=["companion"])
+    app.include_router(alerts_api.router, prefix="/v1", tags=["companion"])
     app.include_router(admin.router, prefix="/admin", tags=["admin"])
 
     # Auth flow (OAuth redirects need server-side handling).
@@ -96,6 +98,7 @@ def create_app() -> FastAPI:
     app.include_router(spa_api.router, prefix="/api", tags=["spa"])
     app.include_router(analytics.router, prefix="/api", tags=["spa"])
     app.include_router(companion.dashboard_router, prefix="/api", tags=["spa"])
+    app.include_router(alerts_api.dashboard_router, prefix="/api", tags=["spa"])
 
     @app.get("/health", tags=["meta"])
     def health() -> dict[str, str]:

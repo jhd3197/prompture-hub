@@ -63,6 +63,7 @@ FEATURES: dict[str, str] = {
     "live": "/v1/live",
     "limits": "/v1/limits",
     "spend": "/v1/spend",
+    "alerts": "/v1/alerts",
 }
 
 #: Seconds between SSE keep-alive comments on an idle live stream.

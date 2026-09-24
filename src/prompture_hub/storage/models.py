@@ -188,3 +188,42 @@ class DevicePairing(SQLModel, table=True):
     last_poll_at: datetime | None = Field(default=None)
     created_at: datetime = Field(default_factory=_utcnow)
     expires_at: datetime = Field(index=True)
+
+
+class AlertRule(SQLModel, table=True):
+    """A condition worth telling someone about, and where to tell them.
+
+    ``kind`` decides what ``threshold`` means:
+
+    - ``key_spend`` — fraction (0-1) of a key's spend cap used this period.
+    - ``provider_headroom`` — fraction of a provider rate-limit window left.
+    - ``balance_low`` — provider account balance below this amount.
+    - ``fallback`` / ``error`` — no threshold; any fallback / failed call.
+    """
+
+    id: int | None = Field(default=None, primary_key=True)
+    name: str
+    kind: str = Field(index=True)
+    threshold: float | None = Field(default=None)
+    key_id: int | None = Field(default=None, foreign_key="hubkey.id", description="Only this key (key rules).")
+    target: str | None = Field(default=None, description="Only this model / account source.")
+    webhook_url: str | None = Field(default=None)
+    ntfy_url: str | None = Field(default=None, description="ntfy topic URL, e.g. https://ntfy.sh/my-topic")
+    cooldown_minutes: int = Field(default=60, description="Minimum gap between repeats of the same alert.")
+    enabled: bool = Field(default=True, index=True)
+    user_id: int | None = Field(default=None, index=True, foreign_key="user.id")
+    created_at: datetime = Field(default_factory=_utcnow)
+
+
+class AlertEvent(SQLModel, table=True):
+    """One time an alert rule fired."""
+
+    id: int | None = Field(default=None, primary_key=True)
+    rule_id: int = Field(index=True, foreign_key="alertrule.id")
+    kind: str
+    subject: str = Field(index=True, description="What the alert is about, e.g. 'key:3' or 'openai/gpt-4o'.")
+    message: str
+    value: float | None = Field(default=None)
+    key_id: int | None = Field(default=None, index=True)
+    created_at: datetime = Field(default_factory=_utcnow, index=True)
+    acknowledged_at: datetime | None = Field(default=None)
