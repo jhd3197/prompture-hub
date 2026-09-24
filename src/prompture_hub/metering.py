@@ -162,8 +162,24 @@ def record(
         session.refresh(row)
     if call is not None:
         call.finished = True
+    if not route:
+        # Resilient routes record per-target limits themselves; a direct call's
+        # limits belong to the model it named.
+        _remember_rate_limits(row.model, meta)
     _publish_finished(row, call, route)
     return row
+
+
+def _remember_rate_limits(model: str, meta: dict[str, Any] | None) -> None:
+    data = (meta or {}).get("rate_limits")
+    if not model or not isinstance(data, dict):
+        return
+    try:
+        from prompture.infra.rate_limits import LimitSnapshot
+        from prompture.resilience import get_headroom_tracker
+    except ImportError:  # older Prompture without rate-limit headroom
+        return
+    get_headroom_tracker().record(model, LimitSnapshot.from_dict(data))
 
 
 def _publish_finished(row: UsageRecord, call: Call | None, route: dict[str, Any]) -> None:

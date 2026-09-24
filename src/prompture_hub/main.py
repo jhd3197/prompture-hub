@@ -22,6 +22,7 @@ from .routers import (
     companion,
     conversations,
     extract,
+    insights,
     openai_compat,
     responses_compat,
     spa_api,
@@ -85,6 +86,7 @@ def create_app() -> FastAPI:
     app.include_router(conversations.router, prefix="/v1", tags=["conversations"])
     app.include_router(coding_agents.router, prefix="/v1", tags=["coding-agents"])
     app.include_router(companion.router, prefix="/v1", tags=["companion"])
+    app.include_router(insights.router, prefix="/v1", tags=["companion"])
     app.include_router(admin.router, prefix="/admin", tags=["admin"])
 
     # Auth flow (OAuth redirects need server-side handling).

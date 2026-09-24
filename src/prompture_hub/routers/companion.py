@@ -58,7 +58,12 @@ dashboard_router = APIRouter()
 COMPANION_API_VERSION = 1
 
 #: Features a companion can rely on, by name. Endpoints add themselves here.
-FEATURES: dict[str, str] = {"device_pairing": "/v1/companion/device/code", "live": "/v1/live"}
+FEATURES: dict[str, str] = {
+    "device_pairing": "/v1/companion/device/code",
+    "live": "/v1/live",
+    "limits": "/v1/limits",
+    "spend": "/v1/spend",
+}
 
 #: Seconds between SSE keep-alive comments on an idle live stream.
 HEARTBEAT_SECONDS = 15.0

@@ -59,6 +59,26 @@ def _window_start(period: str) -> datetime:
     return now.replace(hour=0, minute=0, second=0, microsecond=0)
 
 
+def window_end(period: str) -> datetime:
+    """When the current cap window for ``period`` resets (exclusive end)."""
+    start = _window_start(period)
+    p = (period or "day").lower()
+    if p == "week":
+        return start + timedelta(days=7)
+    if p == "month":
+        return (start + timedelta(days=32)).replace(day=1)
+    return start + timedelta(days=1)
+
+
+def spend_in_window(key_id: int, period: str) -> float:
+    """Public alias used by the limits endpoint and alert rules."""
+    return _spend_in_window(key_id, period)
+
+
+def calls_in_last_minute(key_id: int) -> int:
+    return _calls_in_last_minute(key_id)
+
+
 def _period_label(period: str) -> str:
     p = (period or "day").lower()
     if p == "week":
