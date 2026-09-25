@@ -89,6 +89,11 @@ def enforce_key_policies(key: HubKey, request: Request) -> None:
             status_code=status.HTTP_401_UNAUTHORIZED,
             detail="Hub key has expired.",
         )
+    if key.paused_at is not None:
+        raise HTTPException(
+            status_code=status.HTTP_403_FORBIDDEN,
+            detail="Hub key is paused. Resume it from the dashboard or a paired companion.",
+        )
     if not ip_allowed(client_ip(request), key.allowed_ips or []):
         raise HTTPException(
             status_code=status.HTTP_403_FORBIDDEN,

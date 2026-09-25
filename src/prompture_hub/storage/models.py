@@ -63,6 +63,17 @@ class HubKey(SQLModel, table=True):
     created_at: datetime = Field(default_factory=_utcnow)
     revoked_at: datetime | None = Field(default=None, index=True)
     user_id: int | None = Field(default=None, index=True, foreign_key="user.id")
+    default_project: str | None = Field(
+        default=None,
+        description="Project a call is attributed to when the request sends no X-Project header.",
+    )
+    paused_at: datetime | None = Field(
+        default=None, description="Set while the key is paused; paused keys are refused like revoked ones."
+    )
+    route_override: str | None = Field(
+        default=None,
+        description="When set, chat calls on this key are served by this model / combo instead of the one requested.",
+    )
 
 
 class UsageRecord(SQLModel, table=True):
@@ -87,6 +98,7 @@ class UsageRecord(SQLModel, table=True):
         description="Model that actually answered (differs from ``model`` for combos / fallbacks).",
     )
     attempts: int = Field(default=1, description="Upstream attempts, including retries and fallbacks.")
+    project: str | None = Field(default=None, index=True, description="Project label (X-Project header or key default).")
     timestamp: datetime = Field(default_factory=_utcnow, index=True)
 
 
@@ -146,3 +158,106 @@ class Message(SQLModel, table=True):
     total_tokens: int = Field(default=0)
     cost_usd: float = Field(default=0.0)
     created_at: datetime = Field(default_factory=_utcnow, index=True)
+
+
+class DeviceToken(SQLModel, table=True):
+    """A credential for a desktop companion (or any read-mostly client).
+
+    Minted through device pairing, never shown in the dashboard. ``scopes``
+    is ``["read"]`` or ``["read", "control"]``; control is granted separately
+    because it can change keys and routes.
+    """
+
+    id: int | None = Field(default=None, primary_key=True)
+    name: str = Field(description="Label chosen when the device was approved.")
+    hashed_secret: str = Field(unique=True, index=True)
+    scopes: list[str] = Field(default_factory=lambda: ["read"], sa_column=Column(JSON))
+    user_id: int | None = Field(default=None, index=True, foreign_key="user.id")
+    created_at: datetime = Field(default_factory=_utcnow)
+    last_used_at: datetime | None = Field(default=None)
+    revoked_at: datetime | None = Field(default=None, index=True)
+
+
+class DevicePairing(SQLModel, table=True):
+    """One pending device authorization (RFC 8628 device code + user code)."""
+
+    id: int | None = Field(default=None, primary_key=True)
+    device_code_hash: str = Field(unique=True, index=True)
+    user_code: str = Field(unique=True, index=True)
+    client_name: str | None = Field(default=None)
+    requested_scopes: list[str] = Field(default_factory=lambda: ["read"], sa_column=Column(JSON))
+    status: str = Field(default="pending", description="pending | approved | denied | consumed")
+    approved_name: str | None = Field(default=None)
+    approved_scopes: list[str] = Field(default_factory=list, sa_column=Column(JSON))
+    approved_by: int | None = Field(default=None, foreign_key="user.id")
+    token_id: int | None = Field(default=None, foreign_key="devicetoken.id")
+    interval: int = Field(default=5)
+    last_poll_at: datetime | None = Field(default=None)
+    created_at: datetime = Field(default_factory=_utcnow)
+    expires_at: datetime = Field(index=True)
+
+
+class AlertRule(SQLModel, table=True):
+    """A condition worth telling someone about, and where to tell them.
+
+    ``kind`` decides what ``threshold`` means:
+
+    - ``key_spend`` — fraction (0-1) of a key's spend cap used this period.
+    - ``provider_headroom`` — fraction of a provider rate-limit window left.
+    - ``balance_low`` — provider account balance below this amount.
+    - ``fallback`` / ``error`` — no threshold; any fallback / failed call.
+    """
+
+    id: int | None = Field(default=None, primary_key=True)
+    name: str
+    kind: str = Field(index=True)
+    threshold: float | None = Field(default=None)
+    key_id: int | None = Field(default=None, foreign_key="hubkey.id", description="Only this key (key rules).")
+    target: str | None = Field(default=None, description="Only this model / account source.")
+    webhook_url: str | None = Field(default=None)
+    ntfy_url: str | None = Field(default=None, description="ntfy topic URL, e.g. https://ntfy.sh/my-topic")
+    cooldown_minutes: int = Field(default=60, description="Minimum gap between repeats of the same alert.")
+    enabled: bool = Field(default=True, index=True)
+    user_id: int | None = Field(default=None, index=True, foreign_key="user.id")
+    created_at: datetime = Field(default_factory=_utcnow)
+
+
+class AlertEvent(SQLModel, table=True):
+    """One time an alert rule fired."""
+
+    id: int | None = Field(default=None, primary_key=True)
+    rule_id: int = Field(index=True, foreign_key="alertrule.id")
+    kind: str
+    subject: str = Field(index=True, description="What the alert is about, e.g. 'key:3' or 'openai/gpt-4o'.")
+    message: str
+    value: float | None = Field(default=None)
+    key_id: int | None = Field(default=None, index=True)
+    created_at: datetime = Field(default_factory=_utcnow, index=True)
+    acknowledged_at: datetime | None = Field(default=None)
+
+
+class CustomEndpoint(SQLModel, table=True):
+    """An OpenAI-compatible server registered in the hub.
+
+    Served as ``openai_compatible/<name>/<model>``. The API key is never
+    stored: ``api_key_env`` names the environment variable that holds it,
+    the same way real provider keys stay in ``.env``.
+    """
+
+    id: int | None = Field(default=None, primary_key=True)
+    name: str = Field(unique=True, index=True)
+    base_url: str
+    api_key_env: str | None = Field(default=None)
+    models: list[str] = Field(default_factory=list, sa_column=Column(JSON))
+    last_status: str | None = Field(default=None, description="online | slow | unreachable | error")
+    last_latency_ms: int | None = Field(default=None)
+    last_checked_at: datetime | None = Field(default=None)
+    user_id: int | None = Field(default=None, index=True, foreign_key="user.id")
+    created_at: datetime = Field(default_factory=_utcnow)
+
+
+class ProviderControl(SQLModel, table=True):
+    """Hub-wide switch for one upstream provider (``openai``, ``claude``, or a compatible profile)."""
+
+    provider: str = Field(primary_key=True)
+    paused_at: datetime | None = Field(default=None)

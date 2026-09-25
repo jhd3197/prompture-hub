@@ -14,6 +14,7 @@ from pydantic import BaseModel, Field
 from sqlmodel import select
 
 from ..auth import generate_key, require_admin
+from ..metering import clean_project
 from ..policies import is_expired, normalize_ip_rules, resolve_expiry
 from ..storage.db import get_session
 from ..storage.models import HubKey, UsageRecord, User, iso_utc
@@ -37,6 +38,9 @@ class CreateKeyRequest(BaseModel):
         default=None,
         description="Optional. If set, the key is attached to that user (must already exist).",
     )
+    default_project: str | None = Field(
+        default=None, max_length=100, description="Project for calls that send no X-Project header."
+    )
 
 
 class CreateKeyResponse(BaseModel):
@@ -51,6 +55,7 @@ class CreateKeyResponse(BaseModel):
     expires_at: str | None = None
     user_id: int | None = None
     user_email: str | None = None
+    default_project: str | None = None
 
 
 @router.post("/keys", response_model=CreateKeyResponse, status_code=status.HTTP_201_CREATED)
@@ -89,6 +94,7 @@ def create_key(body: CreateKeyRequest) -> CreateKeyResponse:
             allowed_ips=normalize_ip_rules(body.allowed_ips),
             expires_at=resolve_expiry(body.expires_at, body.expires_in_days),
             user_id=user_id,
+            default_project=clean_project(body.default_project),
         )
         session.add(row)
         session.commit()
@@ -105,6 +111,7 @@ def create_key(body: CreateKeyRequest) -> CreateKeyResponse:
             expires_at=iso_utc(row.expires_at),
             user_id=user_id,
             user_email=user_email,
+            default_project=row.default_project,
         )
 
 
@@ -127,6 +134,9 @@ def list_keys() -> list[dict[str, Any]]:
                 "expired": is_expired(r),
                 "active": r.revoked_at is None and not is_expired(r),
                 "user_id": r.user_id,
+                "default_project": r.default_project,
+                "paused": r.paused_at is not None,
+                "route_override": r.route_override,
             }
             for r in rows
         ]
@@ -148,6 +158,7 @@ def revoke_key(key_id: int) -> Response:
 def list_usage(
     key_id: int | None = None,
     model: str | None = None,
+    project: str | None = None,
     limit: int = 100,
 ) -> list[dict[str, Any]]:
     with get_session() as session:
@@ -156,6 +167,8 @@ def list_usage(
             stmt = stmt.where(UsageRecord.key_id == key_id)
         if model:
             stmt = stmt.where(UsageRecord.model == model)
+        if project:
+            stmt = stmt.where(UsageRecord.project == project)
         return [
             {
                 "id": r.id,
@@ -168,6 +181,7 @@ def list_usage(
                 "cost_usd": r.cost_usd,
                 "latency_ms": r.latency_ms,
                 "status": r.status,
+                "project": r.project,
                 "timestamp": iso_utc(r.timestamp),
             }
             for r in session.exec(stmt).all()

@@ -25,6 +25,8 @@ from prompture.gateway import (
     stream_responses_events,
 )
 
+from .. import metering
+from ..metering import request_project
 from ..pipeline import after_turn, prepare_messages
 from ..quotas import enforce_quotas
 from ..storage.models import HubKey
@@ -36,7 +38,11 @@ _ENDPOINT = "/v1/responses"
 
 
 @router.post("/responses")
-async def responses(request: Request, key: HubKey = Depends(enforce_quotas)):
+async def responses(
+    request: Request,
+    key: HubKey = Depends(enforce_quotas),
+    project: str | None = Depends(request_project),
+):
     body: dict[str, Any] = await request.json()
     model = str(body.get("model") or "")
     if not model:
@@ -56,7 +62,9 @@ async def responses(request: Request, key: HubKey = Depends(enforce_quotas)):
 
     from prompture.drivers import get_driver_for_model
 
-    driver = get_driver_for_model(model)
+    routed = metering.effective_model(key, model)
+    driver = get_driver_for_model(routed)
+    call = metering.begin(key, model, _ENDPOINT, project, stream=bool(body.get("stream")), routed_to=routed)
     started = time.perf_counter()
 
     def record(outcome: ChatOutcome) -> None:
@@ -68,15 +76,23 @@ async def responses(request: Request, key: HubKey = Depends(enforce_quotas)):
             "error" if outcome.error else "ok",
             str(outcome.error) if outcome.error else None,
             endpoint=_ENDPOINT,
-            route=outcome.meta.get("route") or {"attempts": getattr(outcome.error, "attempts", None) or []},
+            route={"attempts": getattr(outcome.error, "attempts", None) or []},
+            meta=outcome.meta,
+            project=project,
+            call=call,
         )
 
     if body.get("stream"):
         def event_gen() -> Iterator[str]:
-            for event in stream_responses_events(
-                live_events_for(driver, msgs, tools, options), model=model, on_complete=record,
-            ):
-                yield responses_sse(event)
+            try:
+                for event in stream_responses_events(
+                    live_events_for(driver, msgs, tools, options), model=model, on_complete=record,
+                ):
+                    if "delta" in str(event.get("type", "")):
+                        call.mark_first_token()
+                    yield responses_sse(event)
+            finally:
+                call.close()
 
         return StreamingResponse(event_gen(), media_type="text/event-stream", headers=SSE_HEADERS)
 

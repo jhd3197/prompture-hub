@@ -31,7 +31,9 @@ from prompture.gateway import (
     stream_anthropic_events,
 )
 
+from .. import metering
 from ..auth import require_hub_key
+from ..metering import request_project
 from ..pipeline import after_turn, prepare_messages
 from ..quotas import enforce_quotas
 from ..storage.models import HubKey
@@ -63,7 +65,11 @@ def _check_allowed(key: HubKey, requested: str, resolved: str) -> None:
 
 
 @router.post("/messages")
-async def messages(request: Request, key: HubKey = Depends(enforce_quotas)):
+async def messages(
+    request: Request,
+    key: HubKey = Depends(enforce_quotas),
+    project: str | None = Depends(request_project),
+):
     body: dict[str, Any] = await request.json()
     requested = str(body.get("model") or "")
     if not requested:
@@ -75,7 +81,9 @@ async def messages(request: Request, key: HubKey = Depends(enforce_quotas)):
 
     from prompture.drivers import get_driver_for_model
 
-    driver = get_driver_for_model(model)
+    routed = metering.effective_model(key, model)
+    driver = get_driver_for_model(routed)
+    call = metering.begin(key, requested, _ENDPOINT, project, stream=bool(body.get("stream")), routed_to=routed)
     started = time.perf_counter()
 
     def record(outcome: ChatOutcome) -> None:
@@ -87,7 +95,10 @@ async def messages(request: Request, key: HubKey = Depends(enforce_quotas)):
             "error" if outcome.error else "ok",
             str(outcome.error) if outcome.error else None,
             endpoint=_ENDPOINT,
-            route=outcome.meta.get("route") or {"attempts": getattr(outcome.error, "attempts", None) or []},
+            route={"attempts": getattr(outcome.error, "attempts", None) or []},
+            meta=outcome.meta,
+            project=project,
+            call=call,
         )
 
     if body.get("stream"):
@@ -95,8 +106,13 @@ async def messages(request: Request, key: HubKey = Depends(enforce_quotas)):
             events = stream_anthropic_events(
                 live_events_for(driver, msgs, tools, options), model=requested, on_complete=record,
             )
-            for name, data in events:
-                yield anthropic_sse(name, data)
+            try:
+                for name, data in events:
+                    if name == "content_block_delta":
+                        call.mark_first_token()
+                    yield anthropic_sse(name, data)
+            finally:
+                call.close()
 
         return StreamingResponse(event_gen(), media_type="text/event-stream", headers=SSE_HEADERS)
 

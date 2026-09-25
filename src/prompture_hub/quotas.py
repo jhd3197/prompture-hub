@@ -27,7 +27,8 @@ from __future__ import annotations
 
 from datetime import datetime, timedelta, timezone
 
-from fastapi import Depends, HTTPException, status
+from fastapi import Depends, HTTPException, Request, status
+from prompture.companion import window_start
 from sqlalchemy import func
 from sqlmodel import select
 
@@ -42,21 +43,17 @@ STATUS_RATE_LIMITED = "rate_limited"
 
 
 def _window_start(period: str) -> datetime:
-    """First UTC instant of the current cap window for ``period``.
+    """First UTC instant of the current cap window: day, week (Monday) or month."""
+    return window_start(period)
 
-    - ``day``   → UTC midnight today
-    - ``week``  → most recent Monday 00:00 UTC (ISO weeks start Monday)
-    - ``month`` → 1st of the current UTC month at 00:00
-    """
-    now = datetime.now(timezone.utc)
-    p = (period or "day").lower()
-    if p == "week":
-        monday = now - timedelta(days=now.weekday())
-        return monday.replace(hour=0, minute=0, second=0, microsecond=0)
-    if p == "month":
-        return now.replace(day=1, hour=0, minute=0, second=0, microsecond=0)
-    # default: day
-    return now.replace(hour=0, minute=0, second=0, microsecond=0)
+
+def spend_in_window(key_id: int, period: str) -> float:
+    """Public alias used by the limits endpoint and alert rules."""
+    return _spend_in_window(key_id, period)
+
+
+def calls_in_last_minute(key_id: int) -> int:
+    return _calls_in_last_minute(key_id)
 
 
 def _period_label(period: str) -> str:
@@ -91,22 +88,14 @@ def _calls_in_last_minute(key_id: int) -> int:
     return int(count or 0)
 
 
-def _record_rejection(key_id: int, endpoint: str, model: str, reason: str) -> None:
+def _record_rejection(key_id: int, endpoint: str, model: str, reason: str, project: str | None = None) -> None:
     """Stamp a quota_exceeded / rate_limited row so the dashboard sees the rejection."""
-    with get_session() as session:
-        session.add(
-            UsageRecord(
-                key_id=key_id,
-                model=model or "",
-                endpoint=endpoint,
-                status=reason,
-                error=reason,
-            )
-        )
-        session.commit()
+    from .metering import record
+
+    record(key_id=key_id, model=model, endpoint=endpoint, status=reason, error=reason, project=project)
 
 
-def check_quotas(key: HubKey, endpoint: str = "", model: str = "") -> None:
+def check_quotas(key: HubKey, endpoint: str = "", model: str = "", project: str | None = None) -> None:
     """Raise an HTTPException if the key has tripped its spend or rate quota.
 
     Spend is checked first; over-cap requests can't bypass it by being slow.
@@ -114,7 +103,7 @@ def check_quotas(key: HubKey, endpoint: str = "", model: str = "") -> None:
     period = getattr(key, "spend_period", "day") or "day"
     spent = _spend_in_window(key.id, period)
     if spent >= key.daily_spend_cap_usd:
-        _record_rejection(key.id, endpoint, model, STATUS_QUOTA_EXCEEDED)
+        _record_rejection(key.id, endpoint, model, STATUS_QUOTA_EXCEEDED, project)
         raise HTTPException(
             status_code=status.HTTP_402_PAYMENT_REQUIRED,
             detail=(
@@ -126,7 +115,7 @@ def check_quotas(key: HubKey, endpoint: str = "", model: str = "") -> None:
 
     calls = _calls_in_last_minute(key.id)
     if calls >= key.rate_limit_per_min:
-        _record_rejection(key.id, endpoint, model, STATUS_RATE_LIMITED)
+        _record_rejection(key.id, endpoint, model, STATUS_RATE_LIMITED, project)
         raise HTTPException(
             status_code=status.HTTP_429_TOO_MANY_REQUESTS,
             detail=(
@@ -137,7 +126,7 @@ def check_quotas(key: HubKey, endpoint: str = "", model: str = "") -> None:
         )
 
 
-async def enforce_quotas(key: HubKey = Depends(require_hub_key)) -> HubKey:
+async def enforce_quotas(request: Request, key: HubKey = Depends(require_hub_key)) -> HubKey:
     """Dependency for /v1/* endpoints that should be quota-gated.
 
     Note: the model isn't known here (it's in the request body), so the
@@ -145,5 +134,7 @@ async def enforce_quotas(key: HubKey = Depends(require_hub_key)) -> HubKey:
     re-check after parsing the body if you want per-model attribution —
     most callers don't need that.
     """
-    check_quotas(key)
+    from .metering import resolve_project
+
+    check_quotas(key, endpoint=request.url.path, project=resolve_project(request, key))
     return key

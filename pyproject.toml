@@ -30,7 +30,8 @@ dependencies = [
     "authlib>=1.3",
     "itsdangerous>=2.2",
     "httpx>=0.27",
-    "prompture>=1.12",
+    "prompture>=1.13",  # prompture.companion (shared companion API)
+    "python-multipart>=0.0.9",
 ]
 
 [project.optional-dependencies]

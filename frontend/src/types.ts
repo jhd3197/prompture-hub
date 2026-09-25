@@ -22,6 +22,10 @@ export interface HubKey {
   expires_at?: string | null;
   expired?: boolean;
   prefix?: string;
+  default_project?: string | null;
+  paused?: boolean;
+  paused_at?: string | null;
+  route_override?: string | null;
 }
 
 export interface UsageRow {
@@ -175,12 +179,13 @@ export interface AnalyticsBucket {
 }
 
 export interface Analytics {
-  range: { start: string; end: string; days: number };
+  range: { start: string; end: string; days: number; project?: string | null };
   totals: AnalyticsBucket;
   by_day: Array<AnalyticsBucket & { date: string }>;
   by_model: Array<AnalyticsBucket & { model: string }>;
   by_provider: Array<AnalyticsBucket & { provider: string }>;
   by_key: Array<AnalyticsBucket & { key_id: number; name: string }>;
+  by_project?: Array<AnalyticsBucket & { project: string | null }>;
   recent_errors: Array<{
     timestamp: string;
     model: string;
@@ -190,4 +195,72 @@ export interface Analytics {
     endpoint: string;
     error: string;
   }>;
+}
+
+export interface PairingInfo {
+  user_code: string;
+  client_name: string | null;
+  requested_scopes: string[];
+  expires_at: string;
+}
+
+export interface Device {
+  id: number;
+  name: string;
+  scopes: string[];
+  created_at: string;
+  last_used_at: string | null;
+  revoked_at: string | null;
+  active: boolean;
+}
+
+export type AlertKind = "key_spend" | "provider_headroom" | "balance_low" | "fallback" | "error";
+
+export interface AlertRule {
+  id: number;
+  name: string;
+  kind: AlertKind;
+  threshold: number | null;
+  key_id: number | null;
+  target: string | null;
+  webhook_url: string | null;
+  ntfy_url: string | null;
+  cooldown_minutes: number;
+  enabled: boolean;
+  created_at: string;
+}
+
+export interface AlertEvent {
+  alert_id: number;
+  rule_id: number;
+  rule: string | null;
+  kind: AlertKind;
+  subject: string;
+  message: string;
+  value: number | null;
+  key_id: number | null;
+  created_at: string;
+  acknowledged_at: string | null;
+}
+
+export interface CustomEndpoint {
+  id: number;
+  name: string;
+  base_url: string;
+  api_key_env: string | null;
+  model_prefix: string;
+  models: string[];
+  last_status: "online" | "slow" | "unreachable" | "error" | null;
+  last_latency_ms: number | null;
+  last_checked_at: string | null;
+  created_at: string;
+  detail?: string | null;
+}
+
+export interface EndpointUsage {
+  endpoint: string;
+  range: { start: string; days: number };
+  totals: AnalyticsBucket;
+  by_day: Array<AnalyticsBucket & { date: string }>;
+  by_model: Array<AnalyticsBucket & { model: string }>;
 }

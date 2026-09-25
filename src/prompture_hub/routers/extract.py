@@ -19,9 +19,10 @@ from fastapi import APIRouter, Depends, HTTPException, status
 from fastapi.concurrency import run_in_threadpool
 from pydantic import BaseModel, ConfigDict, Field
 
+from .. import metering
+from ..metering import request_project
 from ..quotas import enforce_quotas
-from ..storage.db import get_session
-from ..storage.models import HubKey, UsageRecord
+from ..storage.models import HubKey
 
 router = APIRouter()
 
@@ -44,6 +45,7 @@ class ExtractRequest(BaseModel):
 async def extract(
     body: ExtractRequest,
     key: HubKey = Depends(enforce_quotas),
+    project: str | None = Depends(request_project),
 ) -> dict[str, Any]:
     if key.allowed_models and body.model not in key.allowed_models:
         raise HTTPException(
@@ -54,7 +56,9 @@ async def extract(
     from prompture.drivers import get_driver_for_model
     from prompture.extraction.core import ask_for_json
 
-    driver = get_driver_for_model(body.model)
+    routed = metering.effective_model(key, body.model)
+    driver = get_driver_for_model(routed)
+    call = metering.begin(key, body.model, "/v1/extract", project, routed_to=routed)
     started = time.perf_counter()
     try:
         result = await run_in_threadpool(
@@ -68,17 +72,15 @@ async def extract(
             strategy=body.strategy,
         )
     except Exception as exc:
-        with get_session() as session:
-            session.add(
-                UsageRecord(
-                    key_id=key.id,
-                    model=body.model,
-                    endpoint="/v1/extract",
-                    status="error",
-                    error=str(exc),
-                )
-            )
-            session.commit()
+        metering.record(
+            key_id=key.id,
+            model=body.model,
+            endpoint="/v1/extract",
+            status="error",
+            error=str(exc),
+            project=project,
+            call=call,
+        )
         raise HTTPException(status_code=status.HTTP_502_BAD_GATEWAY, detail=str(exc)) from exc
     elapsed_ms = int((time.perf_counter() - started) * 1000)
 
@@ -87,21 +89,17 @@ async def extract(
     completion_tok = int(usage.get("completion_tokens", 0))
     cost = float(usage.get("cost", 0.0))
 
-    with get_session() as session:
-        session.add(
-            UsageRecord(
-                key_id=key.id,
-                model=body.model,
-                endpoint="/v1/extract",
-                prompt_tokens=prompt_tok,
-                completion_tokens=completion_tok,
-                total_tokens=prompt_tok + completion_tok,
-                cost_usd=cost,
-                latency_ms=elapsed_ms,
-                status="ok",
-            )
-        )
-        session.commit()
+    metering.record(
+        key_id=key.id,
+        model=body.model,
+        endpoint="/v1/extract",
+        prompt_tokens=prompt_tok,
+        completion_tokens=completion_tok,
+        cost=cost,
+        latency_ms=elapsed_ms,
+        project=project,
+        call=call,
+    )
 
     return {
         "data": result.get("json_object"),

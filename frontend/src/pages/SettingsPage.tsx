@@ -1,5 +1,5 @@
 import { NavLink, Outlet } from "react-router-dom";
-import { IconCode, IconCog, IconNetwork, IconPalette } from "../icons";
+import { IconBolt, IconCode, IconCog, IconNetwork, IconPalette, IconRoute, IconShield } from "../icons";
 
 const SECTIONS: Array<{
   to: string;
@@ -9,6 +9,9 @@ const SECTIONS: Array<{
   { to: "appearance", label: "Appearance", icon: IconPalette },
   { to: "network",    label: "Network",    icon: IconNetwork },
   { to: "api",        label: "API & docs", icon: IconCode },
+  { to: "devices",    label: "Devices",    icon: IconShield },
+  { to: "alerts",     label: "Alerts",     icon: IconBolt },
+  { to: "endpoints",  label: "Endpoints",  icon: IconRoute },
 ];
 
 export function SettingsPage() {

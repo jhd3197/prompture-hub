@@ -1,7 +1,20 @@
 import type {
-  AgentsResponse, Analytics, AuthProviders, ConversationDetail, ConversationSummary,
-  CreatedKey, CurrentUser, HubKey, ModalitiesResponse, ModelsResponse, Overview,
+  AgentsResponse, AlertEvent, AlertKind, AlertRule, Analytics, AuthProviders, ConversationDetail,
+  ConversationSummary, CreatedKey, CurrentUser, CustomEndpoint, Device, EndpointUsage, HubKey,
+  ModalitiesResponse, ModelsResponse, Overview, PairingInfo,
 } from "./types";
+
+export type AlertRuleInput = {
+  name: string;
+  kind: AlertKind;
+  threshold?: number | null;
+  key_id?: number | null;
+  target?: string | null;
+  webhook_url?: string | null;
+  ntfy_url?: string | null;
+  cooldown_minutes?: number;
+  enabled?: boolean;
+};
 
 export class ApiError extends Error {
   status: number;
@@ -55,7 +68,50 @@ export const api = {
   revokeKey: (id: number) =>
     request<void>(`/api/keys/${id}/revoke`, { method: "POST" }),
   models: () => request<ModelsResponse>("/api/models"),
-  analytics: (days: number) => request<Analytics>(`/api/analytics?days=${days}`),
+  analytics: (days: number, project?: string | null) =>
+    request<Analytics>(
+      `/api/analytics?days=${days}${project ? `&project=${encodeURIComponent(project)}` : ""}`,
+    ),
+
+  // Key controls (shared with paired companions; the dashboard session is accepted too).
+  pauseKey: (id: number) => request<HubKey>(`/v1/keys/${id}/pause`, { method: "POST" }),
+  resumeKey: (id: number) => request<HubKey>(`/v1/keys/${id}/resume`, { method: "POST" }),
+  updateKey: (id: number, data: {
+    daily_spend_cap_usd?: number;
+    spend_period?: "day" | "week" | "month";
+    route_override?: string;
+    default_project?: string;
+  }) => request<HubKey>(`/v1/keys/${id}`, { method: "PATCH", body: JSON.stringify(data) }),
+
+  // Companion devices
+  pairing: (code: string) => request<PairingInfo>(`/api/companion/pairings/${encodeURIComponent(code)}`),
+  approvePairing: (code: string, data: { name?: string; scopes: string[] }) =>
+    request<{ status: string; name: string; scopes: string[] }>(
+      `/api/companion/pairings/${encodeURIComponent(code)}/approve`,
+      { method: "POST", body: JSON.stringify(data) },
+    ),
+  denyPairing: (code: string) =>
+    request<void>(`/api/companion/pairings/${encodeURIComponent(code)}/deny`, { method: "POST" }),
+  devices: () => request<Device[]>("/api/companion/devices"),
+  revokeDevice: (id: number) => request<void>(`/api/companion/devices/${id}/revoke`, { method: "POST" }),
+
+  // Alerts
+  alertRules: () => request<AlertRule[]>("/api/alerts/rules"),
+  createAlertRule: (data: AlertRuleInput) =>
+    request<AlertRule>("/api/alerts/rules", { method: "POST", body: JSON.stringify(data) }),
+  updateAlertRule: (id: number, data: Partial<AlertRuleInput>) =>
+    request<AlertRule>(`/api/alerts/rules/${id}`, { method: "PATCH", body: JSON.stringify(data) }),
+  deleteAlertRule: (id: number) => request<void>(`/api/alerts/rules/${id}`, { method: "DELETE" }),
+  alerts: (unacknowledged = false) => request<AlertEvent[]>(`/api/alerts?unacknowledged=${unacknowledged}`),
+  ackAlert: (id: number) => request<AlertEvent>(`/api/alerts/${id}/ack`, { method: "POST" }),
+
+  // Custom endpoints
+  endpoints: () => request<CustomEndpoint[]>("/api/endpoints"),
+  createEndpoint: (data: { name: string; base_url: string; api_key_env?: string | null }) =>
+    request<CustomEndpoint>("/api/endpoints", { method: "POST", body: JSON.stringify(data) }),
+  deleteEndpoint: (id: number) => request<void>(`/api/endpoints/${id}`, { method: "DELETE" }),
+  checkEndpoint: (id: number) => request<CustomEndpoint>(`/api/endpoints/${id}/check`, { method: "POST" }),
+  endpointUsage: (id: number, days = 7) => request<EndpointUsage>(`/api/endpoints/${id}/usage?days=${days}`),
   agents: () => request<AgentsResponse>("/api/agents"),
   modalities: () => request<ModalitiesResponse>("/api/modalities"),
   workspaceDirs: () => request<{

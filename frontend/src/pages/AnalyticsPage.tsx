@@ -224,6 +224,15 @@ export function AnalyticsPage() {
                 <BreakdownTable title="By serving provider" rows={data.by_provider} name={r => r.provider} />
                 <BreakdownTable title="By hub key" rows={data.by_key} name={r => r.name} />
               </div>
+              {data.by_project && data.by_project.some(r => r.project) && (
+                <div className="mb24">
+                  <BreakdownTable
+                    title="By project"
+                    rows={data.by_project}
+                    name={r => r.project ?? "(no project)"}
+                  />
+                </div>
+              )}
 
               {data.recent_errors.length > 0 && (
                 <div className="card">

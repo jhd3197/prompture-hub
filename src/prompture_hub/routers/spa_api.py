@@ -16,6 +16,7 @@ from sqlalchemy import func
 from sqlmodel import select
 
 from ..auth import generate_key, require_user
+from ..metering import clean_project
 from ..policies import is_expired, normalize_ip_rules, resolve_expiry
 from ..settings import get_settings
 from ..storage.db import get_session
@@ -43,6 +44,10 @@ def _serialize_key(k: HubKey) -> dict[str, Any]:
         "expires_at": iso_utc(k.expires_at),
         "expired": is_expired(k),
         "active": k.revoked_at is None and not is_expired(k),
+        "default_project": k.default_project,
+        "paused": k.paused_at is not None,
+        "paused_at": iso_utc(k.paused_at),
+        "route_override": k.route_override,
     }
 
 
@@ -60,6 +65,7 @@ def _serialize_usage(u: UsageRecord) -> dict[str, Any]:
         "status": u.status,
         "served_by": u.served_by,
         "attempts": u.attempts,
+        "project": u.project,
         "timestamp": iso_utc(u.timestamp),
     }
 
@@ -157,6 +163,7 @@ class CreateKeyBody(BaseModel):
     allowed_ips: list[str] = Field(default_factory=list)
     expires_at: datetime | None = None
     expires_in_days: int | None = None
+    default_project: str | None = Field(default=None, max_length=100)
 
 
 @router.post("/keys", status_code=status.HTTP_201_CREATED)
@@ -183,6 +190,7 @@ def create_key(
             allowed_ips=normalize_ip_rules(body.allowed_ips),
             expires_at=resolve_expiry(body.expires_at, body.expires_in_days),
             user_id=user_id,
+            default_project=clean_project(body.default_project),
         )
         session.add(row)
         session.commit()
@@ -197,6 +205,7 @@ def create_key(
             "rate_limit_per_min": row.rate_limit_per_min,
             "allowed_ips": row.allowed_ips or [],
             "expires_at": iso_utc(row.expires_at),
+            "default_project": row.default_project,
         }
 
 

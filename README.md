@@ -15,6 +15,10 @@
 
 Self-hosted gateway over [Prompture](https://github.com/jhd3197/prompture)'s multi-provider LLM driver registry. Think OpenRouter, except *you* control the keys, the metering, and the trust boundary.
 
+```bash
+pip install prompture-hub
+```
+
 <picture>
   <source media="(prefers-color-scheme: dark)" srcset="docs/screenshots/dashboard-dark.png">
   <img alt="prompture-hub dashboard: spend, active keys and live metered calls" src="docs/screenshots/dashboard-light.png">
@@ -30,6 +34,17 @@ Self-hosted gateway over [Prompture](https://github.com/jhd3197/prompture)'s mul
     <td width="50%"><img alt="Resumable conversation with per-turn tokens and cost" src="docs/screenshots/sessions-dark.png"><br><sub><b>Sessions</b> — resumable conversations with per-turn tokens and cost</sub></td>
   </tr>
 </table>
+
+## Prompture Desk: The Hub in Your Tray
+
+**Watch spend and live calls from your tray, and pause keys without opening the dashboard.** [Prompture Desk](https://github.com/jhd3197/Prompture-Desk) pairs with the hub once and shows running calls, spend per provider and project, rate-limit headroom and alerts. Windows, macOS and Linux.
+
+<p align="center">
+  <img src="https://raw.githubusercontent.com/jhd3197/Prompture-Desk/main/docs/screenshots/capsule.png" width="380" alt="Prompture Desk capsule: per-provider usage today" />
+  <img src="https://raw.githubusercontent.com/jhd3197/Prompture-Desk/main/docs/screenshots/dock.png" width="250" alt="Prompture Desk edge dock with a provider's card open, showing Pause and Route" />
+</p>
+
+<p align="center"><a href="https://github.com/jhd3197/Prompture-Desk/releases"><b>Download Prompture Desk →</b></a></p>
 
 ## Why this exists
 
@@ -133,6 +148,7 @@ The dashboard lives at `http://localhost:1984/` and shows recent keys, recent ca
 | **Embeddings** | `/v1/embeddings` | Prompture's embedding drivers, metered per key. |
 | **Prompture-native** | `/v1/extract` | Structured extraction with JSON Schema. Exposes Prompture's `ask_for_json` + strategies (`provider_native`, `tool_call`, `prompted_repair`) over HTTP. |
 | **Sessions** | `/v1/conversations` (CRUD) + `conversation_id` on `/v1/chat/completions` | Resumable chat: a later request replays prior turns server-side so the client doesn't need to ship full history. |
+| **Companion** | `/v1/companion/info`, `/v1/companion/device/*`, `/v1/live`, `/v1/limits`, `/v1/spend`, `/v1/alerts`, `/v1/keys/{id}` | For desktop companions and status widgets: device pairing, a live stream of calls, headroom, spend and alerts, plus key controls. See [Companion API](#companion-api). |
 
 Every chat surface accepts Prompture's virtual model names — `combo/<name>` fallback chains, `auto/cheap` / `auto/best`, aliases and `fusion/<name>` — so retries, key rotation and failover happen inside the hub. Each usage row records which model actually served the call and how many attempts it took.
 
@@ -145,7 +161,12 @@ prompture-hub setup claude-code --create-key --model combo/chat   # mint a key +
 prompture-hub setup claude-code --key ph_... --write               # merge into ~/.claude/settings.json (backed up first)
 prompture-hub setup codex --key ph_... --model auto/best            # ~/.codex/config.toml snippet (Responses API)
 prompture-hub setup aider | cursor | continue | openai | anthropic
+prompture-hub setup claude-code --key ph_... --project . --write   # tag this folder's spend (see Projects)
 ```
+
+### Projects
+
+Send `X-Project: <name>` on any `/v1/*` call (or give a key a `default_project`) and its spend is attributed to that project: analytics gets a *By project* breakdown and `?project=` filter, and `/v1/spend` splits by project. `setup --project NAME` configures the header per tool (`--project .` uses the current folder name). Claude Code gets it in the folder's `.claude/settings.local.json`, Codex in `http_headers`, Continue in `requestOptions`. For tools that can't send headers, `--create-key --project NAME` mints a key with that default.
 
 ### Resumable sessions
 
@@ -175,6 +196,46 @@ curl http://localhost:1984/v1/conversations/conv_... \
 ```
 
 Set `"persist": false` on a chat request to use the session as read-only history without recording the new turn. Conversations are scoped to the HubKey that created them.
+
+## Companion API
+
+Endpoints for desktop companions, tray apps and status widgets. They report on the hub; they can't call models.
+
+[Prompture Desk](#prompture-desk-the-hub-in-your-tray) is the desktop companion built on them.
+
+**Pairing** follows the OAuth 2.0 Device Authorization Grant (RFC 8628). No password is typed on the device:
+
+1. The device calls `POST /v1/companion/device/code` with `scope` set to `read` or `read control`, and shows the returned `user_code`.
+2. You open `/app/pair?code=…` in the dashboard (or type the code there) and approve. You can downgrade the request to read-only.
+3. The device polls `POST /v1/companion/device/token` until it receives a `phd_…` token.
+
+Tokens are listed and revocable under **Settings › Devices**. `GET /v1/companion/info` is public and reports the hub version, API version and features, so a companion can adapt before it pairs.
+
+| Endpoint | Scope | What it returns |
+|---|---|---|
+| `GET /v1/live` | read | Server-Sent Events: `request.started`, `request.first_token`, `request.activity` (coding agents: working vs waiting), `request.finished`, `key.updated`, `alert.fired`. On connect you get a `snapshot` of running calls. Missed events replay from `Last-Event-ID`. Metadata only: no prompt or completion text. |
+| `GET /v1/limits` | read | Each key's spend cap and rate limit, provider rate-limit headroom (from the headers providers send on every response) and provider account balances. Every figure says where it came from. |
+| `GET /v1/spend?period=day\|week\|month` | read | Spend in the current UTC period, split by project, key and model. |
+| `GET /v1/alerts` | read | Recent alerts. `POST /v1/alerts/{id}/ack` needs control scope. |
+| `POST /v1/keys/{id}/pause` · `/resume` · `PATCH /v1/keys/{id}` | control | Pause a key, set a route override (serve every chat call on the key with a chosen model or combo), or change its cap, period or default project. |
+
+The dashboard session and `HUB_ADMIN_TOKEN` also work on these endpoints. When dashboard login is on, a device paired by a user sees only that user's keys. Provider headroom and account balances are shown only to callers who can see every key.
+
+### Alerts
+
+Rules are set under **Settings › Alerts** (`/api/alerts/rules`). Each rule watches for one of:
+
+- **key spend**: a share of a key's cap is used. The default is Prompture's budget degrade threshold.
+- **provider rate-limit headroom**: little of a window is left. The default is Prompture's routing `min_headroom`.
+- **low account balance**
+- **fallbacks**
+- **failed calls**
+
+Fired alerts are stored, appear on `/v1/live`, and can also post to a webhook or an [ntfy](https://ntfy.sh) topic. A rule repeats at most once per its cooldown.
+
+### Custom endpoints
+
+Register any OpenAI-compatible server (vLLM, llama.cpp, a private gateway) under **Settings › Endpoints** (`/api/endpoints`). Its models are served as `openai_compatible/<name>/<model>`. They're metered, attributed and alerted on like built-in providers, and listed in `/v1/models` after a health check. The hub stores only the *name* of the env var that holds the endpoint's key, never the key itself.
 
 ## Dashboard login (Google / GitHub OAuth)
 
@@ -308,6 +369,8 @@ The Vite dev server proxies all backend paths (`/api`, `/auth`, `/v1`, `/admin`,
 - **Real provider keys** (`OPENAI_API_KEY`, etc.) are read directly by Prompture's drivers from environment. They never appear in any HTTP response.
 - **Per-key policies**: model allowlist, spend cap per day/week/month, rate limit, optional **expiry** and **IP / CIDR allowlist**. `X-Forwarded-For` is only honored with `HUB_TRUST_PROXY_HEADERS=true`.
 - **Localhost-only by default**: `HUB_HOST=127.0.0.1`. Public exposure requires a reverse proxy + TLS.
+- **Device tokens** (`phd_…`) are hashed like hub keys and can never call models. `control` scope is granted separately at approval time. Pending pairings expire after 10 minutes and are capped in number.
+- **Live events** carry metadata only: ids, model, project, status, tokens, cost, timings. Prompt and completion text never reach `/v1/live`. Behind a reverse proxy, disable response buffering for `/v1/live`.
 
 ## Analytics
 
@@ -315,7 +378,7 @@ The dashboard's **Analytics** page (and `GET /api/analytics?days=7|30|90`) shows
 
 ## Roadmap
 
-**Shipped:** OpenAI chat completions, Responses API and Anthropic Messages API (streaming + tools), embeddings, `/v1/extract`, combos / `auto/` / fusion routing with per-call route metering, scoped keys (model allowlist, spend caps, rate limits, expiry, IP allowlists), analytics dashboard, `setup` command for coding tools, reasoning replay, optional prompt compression, resumable conversations, coding-agent runner, OAuth login, Alembic migrations.
+**Shipped:** OpenAI chat completions, Responses API and Anthropic Messages API (streaming + tools), embeddings, `/v1/extract`, combos / `auto/` / fusion routing with per-call route metering, scoped keys (model allowlist, spend caps, rate limits, expiry, IP allowlists, pause, route override), analytics dashboard, per-project attribution, `setup` command for coding tools, reasoning replay, optional prompt compression, resumable conversations, coding-agent runner, OAuth login, Alembic migrations, companion API (device pairing, live stream, limits, spend, alerts, key controls), custom OpenAI-compatible endpoints.
 
 **Next:**
 - Combo / alias management in the dashboard (today: `PROMPTURE_COMBOS_FILE`)
