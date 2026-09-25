@@ -35,6 +35,17 @@ pip install prompture-hub
   </tr>
 </table>
 
+## Prompture Desk: The Hub in Your Tray
+
+**Watch spend and live calls from your tray, and pause keys without opening the dashboard.** [Prompture Desk](https://github.com/jhd3197/Prompture-Desk) pairs with the hub once and shows running calls, spend per provider and project, rate-limit headroom and alerts. Windows, macOS and Linux.
+
+<p align="center">
+  <img src="https://raw.githubusercontent.com/jhd3197/Prompture-Desk/main/docs/screenshots/capsule.png" width="380" alt="Prompture Desk capsule: per-provider usage today" />
+  <img src="https://raw.githubusercontent.com/jhd3197/Prompture-Desk/main/docs/screenshots/dock.png" width="250" alt="Prompture Desk edge dock with a provider's card open, showing Pause and Route" />
+</p>
+
+<p align="center"><a href="https://github.com/jhd3197/Prompture-Desk/releases"><b>Download Prompture Desk →</b></a></p>
+
 ## Why this exists
 
 You have provider API keys (OpenAI, Anthropic, Groq, Ollama, etc.). You want to let other apps — including apps you don't fully trust — call LLMs *through* your keys, with per-app limits and observability, **without** ever handing those apps the real provider keys.
@@ -190,12 +201,7 @@ Set `"persist": false` on a chat request to use the session as read-only history
 
 Endpoints for desktop companions, tray apps and status widgets. They report on the hub; they can't call models.
 
-**[Prompture Desk](https://github.com/jhd3197/Prompture-Desk)** is the desktop companion built on them: pair it once and see spend, headroom and running calls from your tray, then pause keys or providers without opening the dashboard.
-
-<p align="center">
-  <img src="https://raw.githubusercontent.com/jhd3197/Prompture-Desk/main/docs/screenshots/capsule.png" width="380" alt="Prompture Desk capsule: per-provider usage today" />
-  <img src="https://raw.githubusercontent.com/jhd3197/Prompture-Desk/main/docs/screenshots/dock.png" width="250" alt="Prompture Desk edge dock with a provider's card open, showing Pause and Route" />
-</p>
+[Prompture Desk](#prompture-desk-the-hub-in-your-tray) is the desktop companion built on them.
 
 **Pairing** follows the OAuth 2.0 Device Authorization Grant (RFC 8628). No password is typed on the device:
 
