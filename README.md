@@ -15,6 +15,10 @@
 
 Self-hosted gateway over [Prompture](https://github.com/jhd3197/prompture)'s multi-provider LLM driver registry. Think OpenRouter, except *you* control the keys, the metering, and the trust boundary.
 
+```bash
+pip install prompture-hub
+```
+
 <picture>
   <source media="(prefers-color-scheme: dark)" srcset="docs/screenshots/dashboard-dark.png">
   <img alt="prompture-hub dashboard: spend, active keys and live metered calls" src="docs/screenshots/dashboard-light.png">
@@ -185,6 +189,13 @@ Set `"persist": false` on a chat request to use the session as read-only history
 ## Companion API
 
 Endpoints for desktop companions, tray apps and status widgets. They report on the hub; they can't call models.
+
+**[Prompture Desk](https://github.com/jhd3197/Prompture-Desk)** is the desktop companion built on them: pair it once and see spend, headroom and running calls from your tray, then pause keys or providers without opening the dashboard.
+
+<p align="center">
+  <img src="https://raw.githubusercontent.com/jhd3197/Prompture-Desk/main/docs/screenshots/capsule.png" width="380" alt="Prompture Desk capsule: per-provider usage today" />
+  <img src="https://raw.githubusercontent.com/jhd3197/Prompture-Desk/main/docs/screenshots/dock.png" width="250" alt="Prompture Desk edge dock with a provider's card open, showing Pause and Route" />
+</p>
 
 **Pairing** follows the OAuth 2.0 Device Authorization Grant (RFC 8628). No password is typed on the device:
 
