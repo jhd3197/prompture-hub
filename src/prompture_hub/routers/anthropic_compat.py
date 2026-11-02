@@ -16,7 +16,7 @@ import time
 from collections.abc import Iterator
 from typing import Any
 
-from fastapi import APIRouter, Depends, HTTPException, Request, status
+from fastapi import APIRouter, Depends, HTTPException, Request, Response, status
 from fastapi.concurrency import run_in_threadpool
 from fastapi.responses import StreamingResponse
 from prompture.gateway import (
@@ -35,9 +35,9 @@ from .. import metering
 from ..auth import require_hub_key
 from ..metering import request_project
 from ..pipeline import after_turn, prepare_messages
-from ..quotas import enforce_quotas
+from ..quotas import admit, enforce_quotas
 from ..storage.models import HubKey
-from .openai_compat import _record
+from .openai_compat import _record, cost_warning
 
 router = APIRouter()
 
@@ -67,6 +67,7 @@ def _check_allowed(key: HubKey, requested: str, resolved: str) -> None:
 @router.post("/messages")
 async def messages(
     request: Request,
+    response: Response,
     key: HubKey = Depends(enforce_quotas),
     project: str | None = Depends(request_project),
 ):
@@ -83,7 +84,13 @@ async def messages(
 
     routed = metering.effective_model(key, model)
     driver = get_driver_for_model(routed)
-    call = metering.begin(key, requested, _ENDPOINT, project, stream=bool(body.get("stream")), routed_to=routed)
+    res = admit(
+        key, requested, _ENDPOINT, project, served_by=routed,
+        input_tokens=estimate_input_tokens(msgs, tools), output_tokens=body.get("max_tokens"),
+    )
+    call = metering.begin(
+        key, requested, _ENDPOINT, project, stream=bool(body.get("stream")), routed_to=routed, reservation=res
+    )
     started = time.perf_counter()
 
     def record(outcome: ChatOutcome) -> None:
@@ -114,17 +121,23 @@ async def messages(
             finally:
                 call.close()
 
-        return StreamingResponse(event_gen(), media_type="text/event-stream", headers=SSE_HEADERS)
+        return StreamingResponse(
+            event_gen(), media_type="text/event-stream", headers={**SSE_HEADERS, **cost_warning(res)}
+        )
 
+    response.headers.update(cost_warning(res))
     try:
-        outcome = await run_in_threadpool(run_chat, driver, msgs, options, tools=tools or None)
-    except NotImplementedError as exc:
-        record(ChatOutcome(error=exc))
-        raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail=str(exc)) from exc
-    except Exception as exc:
-        record(ChatOutcome(error=exc))
-        raise HTTPException(status_code=status.HTTP_502_BAD_GATEWAY, detail=str(exc)) from exc
-    record(outcome)
+        try:
+            outcome = await run_in_threadpool(run_chat, driver, msgs, options, tools=tools or None)
+        except NotImplementedError as exc:
+            record(ChatOutcome(error=exc))
+            raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail=str(exc)) from exc
+        except Exception as exc:
+            record(ChatOutcome(error=exc))
+            raise HTTPException(status_code=status.HTTP_502_BAD_GATEWAY, detail=str(exc)) from exc
+        record(outcome)
+    finally:
+        call.release()
     return anthropic_message(outcome, model=requested)
 
 
