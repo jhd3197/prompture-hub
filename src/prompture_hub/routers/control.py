@@ -15,10 +15,11 @@ from __future__ import annotations
 from datetime import datetime, timezone
 from typing import Any
 
-from fastapi import APIRouter, Depends, HTTPException, status
-from pydantic import BaseModel, Field
+from fastapi import APIRouter, Depends, HTTPException, Response, status
+from pydantic import Field
 
 from .. import audit, live
+from ..cap_alias import CapAliasBody, cap_fields, flag_deprecated, with_old_name
 from ..companion_auth import Principal, require_control, visible_key_ids
 from ..metering import clean_project
 from ..storage.db import get_session
@@ -27,8 +28,7 @@ from ..storage.models import HubKey, ProviderControl, iso_utc
 router = APIRouter()
 
 
-class KeyControlPatch(BaseModel):
-    daily_spend_cap_usd: float | None = Field(default=None, ge=0)
+class KeyControlPatch(CapAliasBody):
     spend_period: str | None = Field(default=None, pattern="^(day|week|month)$")
     rate_limit_per_min: int | None = Field(default=None, ge=1)
     route_override: str | None = Field(
@@ -53,7 +53,7 @@ def _state(key: HubKey) -> dict[str, Any]:
         "paused_at": iso_utc(key.paused_at),
         "route_override": key.route_override,
         "default_project": key.default_project,
-        "daily_spend_cap_usd": key.daily_spend_cap_usd,
+        **cap_fields(key.spend_cap_usd),
         "spend_period": key.spend_period,
         "rate_limit_per_min": key.rate_limit_per_min,
     }
@@ -62,7 +62,7 @@ def _state(key: HubKey) -> dict[str, Any]:
 def _announce(key: HubKey, changes: dict[str, Any], principal: Principal) -> None:
     live.get_bus().publish(
         "key.updated",
-        {"key_id": key.id, "key_name": key.name, "changes": changes, "by": principal.kind},
+        {"key_id": key.id, "key_name": key.name, "changes": with_old_name(changes), "by": principal.kind},
     )
 
 
@@ -89,8 +89,11 @@ def resume_key(key_id: int, principal: Principal = Depends(require_control)) -> 
 
 
 @router.patch("/keys/{key_id}")
-def update_key(key_id: int, body: KeyControlPatch, principal: Principal = Depends(require_control)) -> dict[str, Any]:
-    changes = body.model_dump(exclude_unset=True)
+def update_key(
+    key_id: int, body: KeyControlPatch, response: Response, principal: Principal = Depends(require_control)
+) -> dict[str, Any]:
+    flag_deprecated(body, response)
+    changes = body.changes()
     if "route_override" in changes:
         route = (changes["route_override"] or "").strip()
         if route and "/" not in route:
@@ -101,7 +104,7 @@ def update_key(key_id: int, body: KeyControlPatch, principal: Principal = Depend
         changes["route_override"] = route or None
     if "default_project" in changes:
         changes["default_project"] = clean_project(changes["default_project"])
-    if any(changes.get(f, 0) is None for f in ("daily_spend_cap_usd", "spend_period", "rate_limit_per_min")):
+    if any(changes.get(f, 0) is None for f in ("spend_cap_usd", "spend_period", "rate_limit_per_min")):
         raise HTTPException(
             status_code=status.HTTP_400_BAD_REQUEST, detail="Cap, period and rate limit cannot be cleared."
         )

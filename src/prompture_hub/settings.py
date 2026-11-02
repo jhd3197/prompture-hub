@@ -124,6 +124,13 @@ class HubSettings(BaseSettings):
         description="Safety net: an in-flight cost reservation that was never released expires after this long.",
     )
 
+    # --- billing reconciliation ---
+    billing_tolerance_pct: float = Field(
+        default=10, ge=0, description="A hub-vs-provider difference is a mismatch only if it exceeds this percent AND the USD floor."
+    )
+    billing_tolerance_usd: float = Field(default=0.5, ge=0, description="USD floor for a mismatch (see billing_tolerance_pct).")
+    billing_cache_seconds: float = Field(default=300, ge=0, description="How long a reconciliation result is reused unless refresh=true.")
+
     @field_validator("unknown_pricing", mode="before")
     @classmethod
     def _normalize_unknown_pricing(cls, value: object) -> object:

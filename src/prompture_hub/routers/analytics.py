@@ -10,11 +10,12 @@ from __future__ import annotations
 
 from collections import defaultdict
 from datetime import datetime, timedelta, timezone
-from typing import Any
+from typing import Any, Literal
 
 from fastapi import APIRouter, Depends, Query
 from sqlmodel import select
 
+from .. import billing
 from ..auth import require_user
 from ..storage.db import get_session
 from ..storage.models import HubKey, UsageRecord, User, iso_utc
@@ -154,3 +155,13 @@ def analytics(
             for u in errors[:20]
         ],
     }
+
+
+@router.get("/billing/reconciliation")
+def billing_reconciliation(
+    period: Literal["day", "week", "month"] = "month",
+    refresh: bool = False,
+    user: User = Depends(require_user),
+) -> dict[str, Any]:
+    """Dashboard (session) twin of ``GET /admin/billing/reconciliation``; same payload."""
+    return billing.reconciliation(period, refresh)

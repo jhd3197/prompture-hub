@@ -8,14 +8,15 @@ expect the same session cookie the dashboard uses.
 from __future__ import annotations
 
 from datetime import datetime, timedelta, timezone
-from typing import Any
+from typing import Any, ClassVar
 
 from fastapi import APIRouter, Depends, HTTPException, Response, status
-from pydantic import BaseModel, Field
+from pydantic import Field
 from sqlalchemy import func
 from sqlmodel import select
 
 from ..auth import generate_key, require_user
+from ..cap_alias import CapAliasBody, cap_fields, flag_deprecated
 from ..metering import clean_project
 from ..policies import is_expired, normalize_ip_rules, resolve_expiry
 from ..settings import get_settings
@@ -35,7 +36,7 @@ def _serialize_key(k: HubKey) -> dict[str, Any]:
         "id": k.id,
         "name": k.name,
         "allowed_models": k.allowed_models,
-        "daily_spend_cap_usd": k.daily_spend_cap_usd,
+        **cap_fields(k.spend_cap_usd),
         "spend_period": getattr(k, "spend_period", "day") or "day",
         "rate_limit_per_min": k.rate_limit_per_min,
         "created_at": iso_utc(k.created_at),
@@ -154,10 +155,10 @@ def list_keys(user: User = Depends(require_user)) -> list[dict[str, Any]]:
         return [_serialize_key(k) for k in session.exec(stmt).all()]
 
 
-class CreateKeyBody(BaseModel):
+class CreateKeyBody(CapAliasBody):
+    _cap_nullable: ClassVar[bool] = False
     name: str = Field(min_length=1, max_length=100)
     allowed_models: list[str] = Field(default_factory=list)
-    daily_spend_cap_usd: float = Field(default=1.0, ge=0)
     spend_period: str = Field(default="day")
     rate_limit_per_min: int = Field(default=60, ge=1)
     allowed_ips: list[str] = Field(default_factory=list)
@@ -169,8 +170,10 @@ class CreateKeyBody(BaseModel):
 @router.post("/keys", status_code=status.HTTP_201_CREATED)
 def create_key(
     body: CreateKeyBody,
+    response: Response,
     user: User = Depends(require_user),
 ) -> dict[str, Any]:
+    flag_deprecated(body, response)
     plaintext, hashed = generate_key()
     user_id = user.id if (user.id and user.id > 0) else None
     period = (body.spend_period or "day").lower()
@@ -184,7 +187,7 @@ def create_key(
             name=body.name.strip(),
             hashed_secret=hashed,
             allowed_models=[m.strip() for m in body.allowed_models if m.strip()],
-            daily_spend_cap_usd=body.daily_spend_cap_usd,
+            spend_cap_usd=body.cap_or(1.0),
             spend_period=period,
             rate_limit_per_min=body.rate_limit_per_min,
             allowed_ips=normalize_ip_rules(body.allowed_ips),
@@ -200,7 +203,7 @@ def create_key(
             "name": row.name,
             "key": plaintext,
             "allowed_models": row.allowed_models,
-            "daily_spend_cap_usd": row.daily_spend_cap_usd,
+            **cap_fields(row.spend_cap_usd),
             "spend_period": row.spend_period,
             "rate_limit_per_min": row.rate_limit_per_min,
             "allowed_ips": row.allowed_ips or [],

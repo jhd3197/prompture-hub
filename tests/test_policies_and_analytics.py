@@ -41,7 +41,7 @@ ADMIN = {"Authorization": "Bearer test-token"}
 
 
 def _create_key(**extra):
-    payload = {"name": "k", "allowed_models": [], "daily_spend_cap_usd": 100.0, **extra}
+    payload = {"name": "k", "allowed_models": [], "spend_cap_usd": 100.0, **extra}
     return _client().post("/admin/keys", headers=ADMIN, json=payload)
 
 

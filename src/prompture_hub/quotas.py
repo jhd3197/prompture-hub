@@ -136,7 +136,7 @@ def _violation(key: HubKey, estimate: float) -> QuotaError | None:
     Counts reserved cost and in-flight calls, so callers hold ``reservations.lock``.
     """
     period = (getattr(key, "spend_period", "day") or "day").lower()
-    cap = key.daily_spend_cap_usd
+    cap = key.spend_cap_usd
     spent = _spend_in_window(key.id, period)
     reserved = reservations.reserved_usd(key.id)
     figures = {

@@ -60,7 +60,7 @@ def _client() -> TestClient:
 
 
 def _key(**extra) -> tuple[int, str]:
-    r = _client().post("/admin/keys", headers=ADMIN, json={"name": "app", "daily_spend_cap_usd": 1.0, **extra})
+    r = _client().post("/admin/keys", headers=ADMIN, json={"name": "app", "spend_cap_usd": 1.0, **extra})
     return r.json()["id"], r.json()["key"]
 
 
@@ -103,18 +103,18 @@ def test_admin_patch_updates_limits_and_returns_list_shape():
     kid, _ = _key()
     r = _client().patch(
         f"/admin/keys/{kid}", headers=ADMIN,
-        json={"daily_spend_cap_usd": 7.5, "spend_period": "week", "rate_limit_per_min": 5},
+        json={"spend_cap_usd": 7.5, "spend_period": "week", "rate_limit_per_min": 5},
     )
     assert r.status_code == 200, r.text
     listed = next(k for k in _client().get("/admin/keys", headers=ADMIN).json() if k["id"] == kid)
     assert r.json() == listed
-    assert (listed["daily_spend_cap_usd"], listed["spend_period"], listed["rate_limit_per_min"]) == (7.5, "week", 5)
+    assert (listed["spend_cap_usd"], listed["spend_period"], listed["rate_limit_per_min"]) == (7.5, "week", 5)
 
 
 @pytest.mark.parametrize(
     "body",
     [
-        {"daily_spend_cap_usd": -1},
+        {"spend_cap_usd": -1},
         {"spend_period": "year"},
         {"rate_limit_per_min": 0},
         {"rate_limit_per_min": "many"},
@@ -213,6 +213,14 @@ def test_grant_can_exceed_spend_and_goes_negative():
     kid, _ = _key()
     _client().post(f"/admin/keys/{kid}/grant", headers=ADMIN, json={"amount_usd": 5})
     assert spend_in_window(kid, "day") == pytest.approx(-5.0)
+
+
+def test_limits_clamps_negative_window_spend_at_zero():
+    kid, _ = _key()
+    _client().post(f"/admin/keys/{kid}/grant", headers=ADMIN, json={"amount_usd": 5})
+    lim = next(k for k in _client().get("/v1/limits", headers=ADMIN).json()["keys"] if k["id"] == kid)
+    assert lim["spend"]["spent_usd"] == 0
+    assert lim["spend"]["fraction_used"] == 0
 
 
 @pytest.mark.parametrize("amount", [0, -1])

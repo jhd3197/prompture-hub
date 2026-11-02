@@ -12,7 +12,9 @@ export interface HubKey {
   id: number;
   name: string;
   allowed_models: string[];
-  daily_spend_cap_usd: number;
+  spend_cap_usd: number;
+  /** @deprecated Alias of spend_cap_usd. */
+  daily_spend_cap_usd?: number;
   spend_period: SpendPeriod;
   rate_limit_per_min: number;
   created_at: string;
@@ -120,7 +122,7 @@ export interface CreatedKey {
   name: string;
   key: string;
   allowed_models: string[];
-  daily_spend_cap_usd: number;
+  spend_cap_usd: number;
   spend_period: SpendPeriod;
   rate_limit_per_min: number;
 }
@@ -176,6 +178,34 @@ export interface AnalyticsBucket {
   p95_latency_ms: number | null;
   fallbacks: number;
   fallback_rate: number;
+}
+
+export type BillingStatus =
+  | "ok" | "mismatch" | "not_configured" | "error" | "not_comparable" | "balance_only" | "unsupported";
+
+export interface BillingProvider {
+  provider: string;
+  status: BillingStatus;
+  hub_usd: number;
+  provider_usd: number | null;
+  difference_usd: number | null;
+  difference_pct: number | null;
+  balance: number | null;
+  currency: string;
+  source: string | null;
+  caveats: string[];
+  error: string | null;
+  fetched_at: string | null;
+}
+
+export interface BillingReconciliation {
+  period: "day" | "week" | "month";
+  window_start: string;
+  window_end: string;
+  generated_at: string;
+  tolerance: { pct: number; abs_usd: number };
+  providers: BillingProvider[];
+  summary: { mismatches: number; errors: number; unconfigured: number };
 }
 
 export interface Analytics {

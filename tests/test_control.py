@@ -65,7 +65,7 @@ def requested_models(monkeypatch):
 
 
 def _key(**extra) -> tuple[int, str]:
-    r = _client().post("/admin/keys", headers=ADMIN, json={"name": "app", "daily_spend_cap_usd": 5.0, **extra})
+    r = _client().post("/admin/keys", headers=ADMIN, json={"name": "app", "spend_cap_usd": 5.0, **extra})
     return r.json()["id"], r.json()["key"]
 
 
@@ -160,10 +160,10 @@ class TestCapAndProject:
         r = _client().patch(
             f"/v1/keys/{key_id}",
             headers=ADMIN,
-            json={"daily_spend_cap_usd": 0.5, "spend_period": "month", "default_project": " ops "},
+            json={"spend_cap_usd": 0.5, "spend_period": "month", "default_project": " ops "},
         )
         assert r.status_code == 200, r.text
-        assert (r.json()["daily_spend_cap_usd"], r.json()["spend_period"], r.json()["default_project"]) == (
+        assert (r.json()["spend_cap_usd"], r.json()["spend_period"], r.json()["default_project"]) == (
             0.5,
             "month",
             "ops",
@@ -178,8 +178,8 @@ class TestCapAndProject:
         key_id, _ = _key()
         c = _client()
         assert c.patch(f"/v1/keys/{key_id}", headers=ADMIN, json={"spend_period": "year"}).status_code == 422
-        assert c.patch(f"/v1/keys/{key_id}", headers=ADMIN, json={"daily_spend_cap_usd": -1}).status_code == 422
-        assert c.patch(f"/v1/keys/{key_id}", headers=ADMIN, json={"daily_spend_cap_usd": None}).status_code == 400
+        assert c.patch(f"/v1/keys/{key_id}", headers=ADMIN, json={"spend_cap_usd": -1}).status_code == 422
+        assert c.patch(f"/v1/keys/{key_id}", headers=ADMIN, json={"spend_cap_usd": None}).status_code == 400
 
     def test_revoked_keys_cannot_be_changed(self):
         key_id, _ = _key()
