@@ -7,13 +7,13 @@ is intentionally separate from hub-issued user keys — separation of duties.
 from __future__ import annotations
 
 from datetime import datetime, timezone
-from typing import Any
+from typing import Any, Literal
 
 from fastapi import APIRouter, Depends, HTTPException, Query, Response, status
 from pydantic import BaseModel, Field
 from sqlmodel import select
 
-from .. import audit, live
+from .. import audit, billing, live
 from ..auth import generate_key, require_admin
 from ..metering import clean_project
 from ..policies import is_expired, normalize_ip_rules, resolve_expiry
@@ -335,3 +335,12 @@ def list_usage(
             }
             for r in session.exec(stmt).all()
         ]
+
+
+@router.get("/billing/reconciliation")
+def billing_reconciliation(
+    period: Literal["day", "week", "month"] = "month",
+    refresh: bool = Query(default=False, description="Bypass the in-process cache and re-query providers."),
+) -> dict[str, Any]:
+    """Hub-recorded spend vs. provider-billed spend, per provider (see ``prompture_hub.billing``)."""
+    return billing.reconciliation(period, refresh)
