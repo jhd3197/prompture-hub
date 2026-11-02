@@ -4,6 +4,20 @@ All notable changes to this project are documented here.
 The format follows [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/).
 
+## [Unreleased]
+
+### Added
+- Admin cap controls: `PATCH /admin/keys/{id}` changes a key's spend cap, period and rate limit (admin token).
+- `rate_limit_per_min` can now be changed through `PATCH /v1/keys/{id}` and is part of the returned key state.
+- Dashboard: an "Edit limits" button on each active key opens a modal to edit spend cap, period and rate limit.
+- `POST /admin/keys/{id}/reset-spend` and `POST /admin/keys/{id}/grant` credit a key's spend in the current cap window only; they expire when the window rolls over. `GET /admin/keys/{id}/adjustments` lists them.
+- `spent_in_window` on `GET /admin/keys` items.
+- Audit log of key changes (who, when, before/after) with `GET /admin/audit`.
+- Migration `0010`: new `spendadjustment` and `auditlog` tables.
+
+### Changed
+- The cap window spend (used by quota checks, `/v1/limits` and alerts) now includes spend adjustments made in the window, and can be negative after a grant.
+
 ## [0.0.3]
 
 ### Changed
