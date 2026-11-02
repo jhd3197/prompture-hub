@@ -215,6 +215,14 @@ def test_grant_can_exceed_spend_and_goes_negative():
     assert spend_in_window(kid, "day") == pytest.approx(-5.0)
 
 
+def test_limits_clamps_negative_window_spend_at_zero():
+    kid, _ = _key()
+    _client().post(f"/admin/keys/{kid}/grant", headers=ADMIN, json={"amount_usd": 5})
+    lim = next(k for k in _client().get("/v1/limits", headers=ADMIN).json()["keys"] if k["id"] == kid)
+    assert lim["spend"]["spent_usd"] == 0
+    assert lim["spend"]["fraction_used"] == 0
+
+
 @pytest.mark.parametrize("amount", [0, -1])
 def test_grant_requires_positive_amount(amount):
     kid, _ = _key()
