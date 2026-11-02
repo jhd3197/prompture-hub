@@ -79,6 +79,7 @@ export const api = {
   updateKey: (id: number, data: {
     daily_spend_cap_usd?: number;
     spend_period?: "day" | "week" | "month";
+    rate_limit_per_min?: number;
     route_override?: string;
     default_project?: string;
   }) => request<HubKey>(`/v1/keys/${id}`, { method: "PATCH", body: JSON.stringify(data) }),

@@ -83,11 +83,102 @@ function RevokeKeyModal({
   );
 }
 
+function EditLimitsModal({
+  k, onClose, onSaved,
+}: {
+  k: HubKey;
+  onClose: () => void;
+  onSaved: () => void;
+}) {
+  const toast = useToast();
+  const [cap, setCap] = useState(String(k.daily_spend_cap_usd));
+  const [period, setPeriod] = useState<SpendPeriod>(k.spend_period);
+  const [rate, setRate] = useState(String(k.rate_limit_per_min));
+  const [saving, setSaving] = useState(false);
+
+  const capNumber = Number(cap);
+  const rateNumber = Number(rate);
+  const capOk = cap.trim() !== "" && Number.isFinite(capNumber) && capNumber >= 0;
+  const rateOk = rate.trim() !== "" && Number.isInteger(rateNumber) && rateNumber >= 1;
+
+  const changes: Parameters<typeof api.updateKey>[1] = {};
+  if (capOk && capNumber !== k.daily_spend_cap_usd) changes.daily_spend_cap_usd = capNumber;
+  if (period !== k.spend_period) changes.spend_period = period;
+  if (rateOk && rateNumber !== k.rate_limit_per_min) changes.rate_limit_per_min = rateNumber;
+  const dirty = Object.keys(changes).length > 0;
+
+  const save = async () => {
+    setSaving(true);
+    try {
+      await api.updateKey(k.id, changes);
+      toast(`Updated limits for ${k.name}`);
+      onSaved();
+      onClose();
+    } catch (e) {
+      toast(`Couldn't update ${k.name}: ${e}`);
+      setSaving(false);
+    }
+  };
+
+  return (
+    <Modal
+      title={`Edit limits for ${k.name}`}
+      onClose={onClose}
+      desc="Changes apply to the key's very next call."
+      footer={<>
+        <button className="btn btn-ghost" onClick={onClose}>Cancel</button>
+        <button className="btn btn-primary" onClick={save} disabled={!capOk || !rateOk || !dirty || saving}>
+          Save limits
+        </button>
+      </>}
+    >
+      <div className="field">
+        <label>Period</label>
+        <div className="seg" role="radiogroup" aria-label="Spend period">
+          {(["day", "week", "month"] as SpendPeriod[]).map(p => (
+            <button
+              key={p} type="button" role="radio" aria-checked={period === p}
+              className={period === p ? "on" : ""} onClick={() => setPeriod(p)}
+            >
+              {p}
+            </button>
+          ))}
+        </div>
+      </div>
+      <div className="field">
+        <label htmlFor="e-cap">Spend budget</label>
+        <div className="input-prefix">
+          <span className="pfx mono">$</span>
+          <input
+            id="e-cap" type="number" min="0" step="0.01" className="input mono tnum"
+            value={cap} onChange={e => setCap(e.target.value)} aria-invalid={!capOk}
+          />
+        </div>
+        <span className={`hint ${!capOk ? "field-error" : ""}`}>
+          Calls stop once the key reaches this amount for the current {periodSuffix(period)}.
+        </span>
+      </div>
+      <div className="field">
+        <label htmlFor="e-rate">Rate limit</label>
+        <div className="input-suffix">
+          <input
+            id="e-rate" type="number" min="1" step="1" className="input mono tnum"
+            value={rate} onChange={e => setRate(e.target.value)} aria-invalid={!rateOk}
+          />
+          <span className="sfx mono">req/min</span>
+        </div>
+        <span className={`hint ${!rateOk ? "field-error" : ""}`}>Whole number, at least 1.</span>
+      </div>
+    </Modal>
+  );
+}
+
 function KeyRow({
-  k, onRevoke, onChanged,
+  k, onRevoke, onEdit, onChanged,
 }: {
   k: HubKey;
   onRevoke: (k: HubKey) => void;
+  onEdit: (k: HubKey) => void;
   onChanged: () => void;
 }) {
   const [open, setOpen] = useState(false);
@@ -159,6 +250,7 @@ function KeyRow({
               <button className="btn btn-sm" onClick={togglePause}>
                 {k.paused ? "Resume" : "Pause"}
               </button>
+              <button className="btn btn-sm" onClick={() => onEdit(k)}>Edit limits</button>
               <button className="btn btn-sm btn-danger" onClick={() => onRevoke(k)}>
                 <IconTrash />Revoke
               </button>
@@ -192,6 +284,7 @@ export function KeysPage() {
   const [loadError, setLoadError] = useState<string | null>(null);
   const [reveal, setReveal] = useState<CreatedKey | null>(null);
   const [revoking, setRevoking] = useState<HubKey | null>(null);
+  const [editing, setEditing] = useState<HubKey | null>(null);
   const toast = useToast();
   const location = useLocation();
   const navigate = useNavigate();
@@ -298,7 +391,7 @@ export function KeysPage() {
                 </tr>
               </thead>
               <tbody>
-                {keys.map(k => <KeyRow key={k.id} k={k} onRevoke={setRevoking} onChanged={refresh} />)}
+                {keys.map(k => <KeyRow key={k.id} k={k} onRevoke={setRevoking} onEdit={setEditing} onChanged={refresh} />)}
               </tbody>
             </table>
           </div>
@@ -311,6 +404,7 @@ export function KeysPage() {
       </p>
 
       {reveal && <RevealKeyModal created={reveal} onClose={() => setReveal(null)} />}
+      {editing && <EditLimitsModal k={editing} onClose={() => setEditing(null)} onSaved={refresh} />}
       {revoking && (
         <RevokeKeyModal
           k={revoking}
