@@ -12,7 +12,9 @@ export interface HubKey {
   id: number;
   name: string;
   allowed_models: string[];
-  daily_spend_cap_usd: number;
+  spend_cap_usd: number;
+  /** @deprecated Alias of spend_cap_usd. */
+  daily_spend_cap_usd?: number;
   spend_period: SpendPeriod;
   rate_limit_per_min: number;
   created_at: string;
@@ -120,7 +122,7 @@ export interface CreatedKey {
   name: string;
   key: string;
   allowed_models: string[];
-  daily_spend_cap_usd: number;
+  spend_cap_usd: number;
   spend_period: SpendPeriod;
   rate_limit_per_min: number;
 }

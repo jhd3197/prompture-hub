@@ -167,7 +167,7 @@ export function Dashboard({ user }: { user: CurrentUser }) {
                   </div>
                   <div className="right">
                     <div className="mono tnum" style={{ fontSize: 12.5, fontWeight: 600 }}>
-                      ${k.daily_spend_cap_usd.toFixed(2)}
+                      ${k.spend_cap_usd.toFixed(2)}
                     </div>
                     <div className="faint" style={{ fontSize: 11 }}>cap / {k.spend_period}</div>
                   </div>

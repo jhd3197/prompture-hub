@@ -81,7 +81,7 @@ export function CreateKeyPage() {
       const created = await api.createKey({
         name: name.trim(),
         allowed_models: allowAnyModel ? [] : modelList,
-        daily_spend_cap_usd: capNumber,
+        spend_cap_usd: capNumber,
         spend_period: period,
         rate_limit_per_min: rateNumber,
         expires_in_days: expiryDays,

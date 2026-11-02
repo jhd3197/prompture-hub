@@ -56,7 +56,7 @@ export const api = {
   createKey: (data: {
     name: string;
     allowed_models: string[];
-    daily_spend_cap_usd: number;
+    spend_cap_usd: number;
     spend_period: "day" | "week" | "month";
     rate_limit_per_min: number;
     expires_in_days?: number | null;
@@ -80,7 +80,7 @@ export const api = {
   pauseKey: (id: number) => request<HubKey>(`/v1/keys/${id}/pause`, { method: "POST" }),
   resumeKey: (id: number) => request<HubKey>(`/v1/keys/${id}/resume`, { method: "POST" }),
   updateKey: (id: number, data: {
-    daily_spend_cap_usd?: number;
+    spend_cap_usd?: number;
     spend_period?: "day" | "week" | "month";
     rate_limit_per_min?: number;
     route_override?: string;

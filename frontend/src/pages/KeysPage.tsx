@@ -75,7 +75,7 @@ function RevokeKeyModal({
         <div>
           <div className="mono strong" style={{ fontWeight: 600 }}>{k.name} · key #{k.id}</div>
           <div className="faint" style={{ fontSize: 12 }}>
-            {k.allowed_models.length} model{k.allowed_models.length !== 1 ? "s" : ""} · ${k.daily_spend_cap_usd.toFixed(2)}/{periodSuffix(k.spend_period)} cap
+            {k.allowed_models.length} model{k.allowed_models.length !== 1 ? "s" : ""} · ${k.spend_cap_usd.toFixed(2)}/{periodSuffix(k.spend_period)} cap
           </div>
         </div>
       </div>
@@ -91,7 +91,7 @@ function EditLimitsModal({
   onSaved: () => void;
 }) {
   const toast = useToast();
-  const [cap, setCap] = useState(String(k.daily_spend_cap_usd));
+  const [cap, setCap] = useState(String(k.spend_cap_usd));
   const [period, setPeriod] = useState<SpendPeriod>(k.spend_period);
   const [rate, setRate] = useState(String(k.rate_limit_per_min));
   const [saving, setSaving] = useState(false);
@@ -102,7 +102,7 @@ function EditLimitsModal({
   const rateOk = rate.trim() !== "" && Number.isInteger(rateNumber) && rateNumber >= 1;
 
   const changes: Parameters<typeof api.updateKey>[1] = {};
-  if (capOk && capNumber !== k.daily_spend_cap_usd) changes.daily_spend_cap_usd = capNumber;
+  if (capOk && capNumber !== k.spend_cap_usd) changes.spend_cap_usd = capNumber;
   if (period !== k.spend_period) changes.spend_period = period;
   if (rateOk && rateNumber !== k.rate_limit_per_min) changes.rate_limit_per_min = rateNumber;
   const dirty = Object.keys(changes).length > 0;
@@ -228,7 +228,7 @@ function KeyRow({
           )}
         </td>
         <td className="num mono tnum">
-          ${k.daily_spend_cap_usd.toFixed(2)}<span className="faint" style={{ fontSize: 11 }}>/{periodSuffix(k.spend_period)}</span>
+          ${k.spend_cap_usd.toFixed(2)}<span className="faint" style={{ fontSize: 11 }}>/{periodSuffix(k.spend_period)}</span>
         </td>
         <td className="num mono tnum faint">{k.rate_limit_per_min}/min</td>
         <td className="faint mono" style={{ whiteSpace: "nowrap", fontSize: 12.5 }}>
