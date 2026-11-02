@@ -7,6 +7,9 @@ and this project adheres to [Semantic Versioning](https://semver.org/).
 ## [Unreleased]
 
 ### Added
+- Billing reconciliation: `GET /admin/billing/reconciliation?period=day|week|month&refresh=false` compares hub-recorded spend with OpenAI/Anthropic organization cost reports (`OPENAI_ADMIN_KEY` / `ANTHROPIC_ADMIN_KEY`) and OpenRouter usage, reports DeepSeek/Moonshot balances, and flags mismatches. Provider failures only affect their own row.
+- Dashboard: a Billing page (`/billing`, backed by `GET /api/billing/reconciliation`) with period selector, refresh, status badges and per-provider caveats.
+- Settings `HUB_BILLING_TOLERANCE_PCT` (10), `HUB_BILLING_TOLERANCE_USD` (0.50) and `HUB_BILLING_CACHE_SECONDS` (300).
 - Admin cap controls: `PATCH /admin/keys/{id}` changes a key's spend cap, period and rate limit (admin token).
 - `rate_limit_per_min` can now be changed through `PATCH /v1/keys/{id}` and is part of the returned key state.
 - Dashboard: an "Edit limits" button on each active key opens a modal to edit spend cap, period and rate limit.
