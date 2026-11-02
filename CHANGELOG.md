@@ -20,6 +20,12 @@ and this project adheres to [Semantic Versioning](https://semver.org/).
 
 ### Changed
 - The cap window spend (used by quota checks, `/v1/limits` and alerts) now includes spend adjustments made in the window, and can be negative after a grant.
+- Renamed the key spend cap from `daily_spend_cap_usd` to `spend_cap_usd` (the cap is not daily; see `spend_period`). Migration `0011` renames the `hubkey` column in place (batch mode, data kept, reversible with `alembic downgrade`); it runs automatically on boot. Back up the database before upgrading.
+- Audit rows written from now on use `spend_cap_usd` in `before`/`after`; rows written earlier keep `daily_spend_cap_usd` and are returned unchanged.
+- The `key.updated` live event `changes` carries both names when the cap changed.
+
+### Deprecated
+- `daily_spend_cap_usd` is a deprecated alias of `spend_cap_usd`. Request bodies of `POST /admin/keys`, `PATCH /admin/keys/{id}`, `PATCH /v1/keys/{id}` and `POST /api/keys` accept either name (sending both with different values returns 422); using the old name adds `Deprecation: true` and a `Warning: 299` header and logs once per process. Key objects in responses return both names with the same value. `/v1/limits` is unchanged. Older hub clients and prompture-desk keep working. The alias will not be removed before a future minor version.
 
 ### Hardened
 - Cost reservations: each admitted call holds an estimated cost until it settles, so concurrent and streaming calls can no longer overshoot a spend cap, and in-flight calls count toward the rate limit. Applies to chat completions, embeddings, Anthropic messages, Responses and `/v1/extract`. The ledger is process-local (one hub process). Coding-agent runs are not reserved.

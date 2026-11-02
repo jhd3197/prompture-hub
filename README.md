@@ -119,10 +119,12 @@ curl -X POST http://localhost:1984/admin/keys \
   -d '{
     "name": "sketchy-app",
     "allowed_models": ["ollama/llama3.1:8b"],
-    "daily_spend_cap_usd": 1.0,
+    "spend_cap_usd": 1.0,
     "rate_limit_per_min": 30
   }'
 ```
+
+`spend_cap_usd` applies over the key's `spend_period` (day, week or month). It was previously called `daily_spend_cap_usd`; that name is deprecated but still accepted in request bodies, and responses return both fields with the same value. Using the old name adds `Deprecation` and `Warning` response headers. Older hub clients and prompture-desk keep working. Upgrading renames the database column (migration `0011`) automatically on boot; downgrade is supported with Alembic, and you should back up the database before upgrading.
 
 The response includes the plaintext key once — copy it now, you cannot retrieve it again. Hand it to the untrusted app. From inside that app:
 
@@ -227,7 +229,7 @@ These need the `HUB_ADMIN_TOKEN`. Spend adjustments count only in the cap window
 
 | Endpoint | What it does |
 |---|---|
-| `PATCH /admin/keys/{id}` | Change `daily_spend_cap_usd`, `spend_period` and `rate_limit_per_min`. At least one field is required; revoked keys return 404. |
+| `PATCH /admin/keys/{id}` | Change `spend_cap_usd`, `spend_period` and `rate_limit_per_min`. At least one field is required; revoked keys return 404. |
 | `POST /admin/keys/{id}/reset-spend` | Bring the key's spend in the current window to zero. Optional `reason`. |
 | `POST /admin/keys/{id}/grant` | Credit `amount_usd` (> 0) against the current window. Optional `reason`. |
 | `GET /admin/keys/{id}/adjustments` | Adjustments counting toward the current window. |
