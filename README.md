@@ -267,6 +267,24 @@ Caveats:
 - Coding-agent runs (`/v1/coding-agents/run`) have no per-token price and are not reserved; they only get the early cap and rate-limit check.
 - Custom `openai_compatible/<profile>/...` models count as unpriced unless Prompture knows their rates.
 
+### Billing reconciliation
+
+Compares what the hub recorded (`UsageRecord.cost_usd`) with what providers say they billed. `GET /admin/billing/reconciliation?period=day|week|month&refresh=false` (admin bearer; default `month`) returns one row per provider; the dashboard's **Billing** page (`/api/billing/reconciliation`, session login) shows the same data with a period selector and a Refresh button.
+
+The window runs from the UTC period start to the next UTC midnight, so provider daily buckets line up. Hub spend counts only successful calls (`status = ok`), grouped by the provider that served them (`claude` and `anthropic` are the same). Credentials are read by Prompture from the environment, never stored in the hub:
+
+| Provider | Source | Needs | Result |
+| --- | --- | --- | --- |
+| `openai` | organization cost report | `OPENAI_ADMIN_KEY` | compared |
+| `anthropic` | organization cost report | `ANTHROPIC_ADMIN_KEY` | compared |
+| `openrouter` | key usage (`usage_daily/weekly/monthly`) | `OPENROUTER_API_KEY` | compared; `not_comparable` if the period figure is missing (all-time spend is not comparable) |
+| `deepseek`, `moonshot` | account balance | `DEEPSEEK_API_KEY` / `MOONSHOT_API_KEY` | `balance_only`, nothing to compare |
+| anything else with hub spend | none | | `unsupported` |
+
+Statuses: `ok`, `mismatch`, `not_configured` (hub spend still shown, with a hint naming the variable), `error` (fetch failed; short safe message, other providers unaffected), `not_comparable` (incomplete report, non-USD currency, no matching period figure), `balance_only`, `unsupported`. A difference (provider minus hub) is a `mismatch` only if it exceeds both `HUB_BILLING_TOLERANCE_PCT` (default 10) and `HUB_BILLING_TOLERANCE_USD` (default 0.50). Results are cached in-process for `HUB_BILLING_CACHE_SECONDS` (default 300) unless `refresh=true`.
+
+Caveats, also returned per row: provider totals cover the whole organization (or key, for OpenRouter), so activity outside the hub counts; billing data can lag by hours; Anthropic's cost report excludes Priority Tier costs; virtual models (`combo/`, `auto/`) with no `served_by` cannot be attributed to a provider and are left out. Prompture's `reconcile_costs` is not used: it needs a declared organization id and a locally attested scope, and with the hub's whole-org comparison it would add no information.
+
 ### Alerts
 
 Rules are set under **Settings › Alerts** (`/api/alerts/rules`). Each rule watches for one of:
