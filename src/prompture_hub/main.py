@@ -9,11 +9,12 @@ from importlib.metadata import PackageNotFoundError
 from importlib.metadata import version as _pkg_version
 
 from fastapi import FastAPI, HTTPException, Request, status
-from fastapi.responses import FileResponse, RedirectResponse
+from fastapi.responses import FileResponse, JSONResponse, RedirectResponse
 from fastapi.staticfiles import StaticFiles
 from starlette.middleware.sessions import SessionMiddleware
 
 from .auth import LoginRequired
+from .quotas import QuotaError
 from .routers import (
     admin,
     alerts_api,
@@ -83,6 +84,13 @@ def create_app() -> FastAPI:
         # browser redirects there instead of a server-rendered page.
         target = exc.target if exc.target.startswith("/app") else "/app/"
         return RedirectResponse(url=target, status_code=302)
+
+    @app.exception_handler(QuotaError)
+    async def _quota_error_handler(_request: Request, exc: QuotaError):
+        # Same `detail` as any HTTPException, plus a machine-readable `error` object.
+        return JSONResponse(
+            {"detail": exc.detail, "error": exc.error}, status_code=exc.status_code, headers=exc.headers
+        )
 
     # Programmatic surfaces — unchanged.
     app.include_router(openai_compat.router, prefix="/v1", tags=["openai-compat"])

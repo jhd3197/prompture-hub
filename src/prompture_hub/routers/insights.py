@@ -24,6 +24,7 @@ from ..companion_auth import Principal, require_read, visible_key_ids
 from ..metering import paused_providers
 from ..policies import is_expired
 from ..quotas import calls_in_last_minute, spend_in_window
+from ..reservations import reserved_usd
 from ..storage.db import get_session
 from ..storage.models import HubKey, UsageRecord, iso_utc
 
@@ -53,6 +54,7 @@ def _key_limits(key: HubKey) -> dict[str, Any]:
             "period": period,
             "cap_usd": cap,
             "spent_usd": round(spent, 6),
+            "reserved_usd": round(reserved_usd(key.id), 6),
             "fraction_used": round(spent / cap, 4) if cap > 0 else None,
             "resets_at": iso_utc(window_end(period)),
             "source": "hub",

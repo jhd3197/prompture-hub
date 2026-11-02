@@ -19,6 +19,7 @@ Project names are free-form labels, trimmed and capped at
 
 from __future__ import annotations
 
+import logging
 import time
 from dataclasses import dataclass, field
 from typing import Any
@@ -27,8 +28,11 @@ from fastapi import Depends, Request
 
 from . import live
 from .auth import require_hub_key
+from .reservations import Reservation
 from .storage.db import get_session
 from .storage.models import HubKey, UsageRecord
+
+logger = logging.getLogger("prompture_hub.metering")
 
 PROJECT_HEADER = "X-Project"
 MAX_PROJECT_LEN = 100
@@ -71,6 +75,12 @@ class Call:
     activity: str | None = None
     finished: bool = False
     routed_to: str | None = None
+    reservation: Reservation | None = None
+
+    def release(self) -> None:
+        """Drop the call's cost reservation (idempotent)."""
+        if self.reservation is not None:
+            self.reservation.release()
 
     def _base(self) -> dict[str, Any]:
         return {"request_id": self.request_id, "key_id": self.key_id}
@@ -91,6 +101,7 @@ class Call:
 
     def close(self) -> None:
         """End a call that never reached :func:`record` (e.g. the client disconnected)."""
+        self.release()
         if not self.finished:
             self.finished = True
             live.get_bus().publish(
@@ -132,6 +143,12 @@ def effective_model(key: HubKey, requested: str) -> str:
     Refuses the call when that model's provider is paused hub-wide.
     """
     model = key.route_override or requested
+    check_not_paused(model)
+    return model
+
+
+def check_not_paused(model: str) -> None:
+    """Refuse (403) a call to a model whose provider is paused hub-wide."""
     provider = provider_of(model)
     if provider is not None and provider in paused_providers():
         from fastapi import HTTPException, status
@@ -140,7 +157,6 @@ def effective_model(key: HubKey, requested: str) -> str:
             status_code=status.HTTP_403_FORBIDDEN,
             detail=f"Provider '{provider}' is paused on this hub.",
         )
-    return model
 
 
 def begin(
@@ -151,6 +167,7 @@ def begin(
     *,
     stream: bool = False,
     routed_to: str | None = None,
+    reservation: Reservation | None = None,
 ) -> Call:
     """Open a call and announce it on the live stream.
 
@@ -164,6 +181,7 @@ def begin(
         project=clean_project(project),
         stream=stream,
         routed_to=routed_to if routed_to and routed_to != model else None,
+        reservation=reservation,
     )
     live.get_bus().publish(
         "request.started",
@@ -228,6 +246,10 @@ def record(
         session.refresh(row)
     if call is not None:
         call.finished = True
+        call.release()
+        res = call.reservation
+        if res and res.priced and status == "ok" and prompt_tokens + completion_tokens > 0 and not cost:
+            logger.warning("Model %s returned %d tokens at zero cost despite known prices", model, prompt_tokens + completion_tokens)
     if not route:
         # Resilient routes record per-target limits themselves; a direct call's
         # limits belong to the model it named.

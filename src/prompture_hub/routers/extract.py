@@ -15,14 +15,16 @@ from __future__ import annotations
 import time
 from typing import Any
 
-from fastapi import APIRouter, Depends, HTTPException, status
+from fastapi import APIRouter, Depends, HTTPException, Response, status
 from fastapi.concurrency import run_in_threadpool
+from prompture.gateway import estimate_input_tokens
 from pydantic import BaseModel, ConfigDict, Field
 
 from .. import metering
 from ..metering import request_project
-from ..quotas import enforce_quotas
+from ..quotas import admit, enforce_quotas
 from ..storage.models import HubKey
+from .openai_compat import cost_warning
 
 router = APIRouter()
 
@@ -44,6 +46,7 @@ class ExtractRequest(BaseModel):
 @router.post("/extract")
 async def extract(
     body: ExtractRequest,
+    response: Response,
     key: HubKey = Depends(enforce_quotas),
     project: str | None = Depends(request_project),
 ) -> dict[str, Any]:
@@ -58,7 +61,16 @@ async def extract(
 
     routed = metering.effective_model(key, body.model)
     driver = get_driver_for_model(routed)
-    call = metering.begin(key, body.model, "/v1/extract", project, routed_to=routed)
+    options = body.options or {}
+    res = admit(
+        key, body.model, "/v1/extract", project, served_by=routed,
+        input_tokens=estimate_input_tokens(
+            [{"content": body.content}, {"content": body.json_schema}, {"content": body.system_prompt or ""}]
+        ),
+        output_tokens=options.get("max_completion_tokens") or options.get("max_tokens"),
+    )
+    response.headers.update(cost_warning(res))
+    call = metering.begin(key, body.model, "/v1/extract", project, routed_to=routed, reservation=res)
     started = time.perf_counter()
     try:
         result = await run_in_threadpool(
@@ -82,6 +94,8 @@ async def extract(
             call=call,
         )
         raise HTTPException(status_code=status.HTTP_502_BAD_GATEWAY, detail=str(exc)) from exc
+    finally:
+        call.release()
     elapsed_ms = int((time.perf_counter() - started) * 1000)
 
     usage = result.get("usage", {}) or {}

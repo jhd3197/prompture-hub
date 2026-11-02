@@ -18,6 +18,13 @@ and this project adheres to [Semantic Versioning](https://semver.org/).
 ### Changed
 - The cap window spend (used by quota checks, `/v1/limits` and alerts) now includes spend adjustments made in the window, and can be negative after a grant.
 
+### Hardened
+- Cost reservations: each admitted call holds an estimated cost until it settles, so concurrent and streaming calls can no longer overshoot a spend cap, and in-flight calls count toward the rate limit. Applies to chat completions, embeddings, Anthropic messages, Responses and `/v1/extract`. The ledger is process-local (one hub process). Coding-agent runs are not reserved.
+- `/v1/embeddings` is quota-gated with the whitelist, paused-provider and reservation checks; cost is computed from Prompture's rates when the driver reports none.
+- 402/429 responses keep `detail` and add a machine-readable `error` object (`spend_cap_exceeded`, `spend_cap_would_exceed`, `rate_limit_exceeded`, `pricing_unknown`) with the period, cap, spent, reserved and window reset time.
+- `HUB_UNKNOWN_PRICING` (`block` by default): models with no known prices are refused with 402 `pricing_unknown`; `warn` allows them with an `X-Hub-Cost-Warning` header. Local providers and explicit zero-rate models are not flagged. This changes behavior: unpriced models (including custom endpoints) are blocked unless you set `warn`.
+- New settings `HUB_DEFAULT_OUTPUT_TOKEN_ESTIMATE` (1024) and `HUB_RESERVATION_TTL_SECONDS` (900); `/v1/limits` reports `reserved_usd`.
+
 ## [0.0.3]
 
 ### Changed

@@ -8,8 +8,9 @@ directly from environment, so they never need to pass through this layer.
 from __future__ import annotations
 
 from functools import lru_cache
+from typing import Literal
 
-from pydantic import Field
+from pydantic import Field, field_validator
 from pydantic_settings import BaseSettings, SettingsConfigDict
 
 
@@ -102,6 +103,31 @@ class HubSettings(BaseSettings):
         default=600,
         description="Per-run subprocess timeout in seconds.",
     )
+
+    # --- spend-cap enforcement ---
+    unknown_pricing: Literal["block", "warn"] = Field(
+        default="block",
+        description=(
+            "block | warn. What to do with a call whose model has no known token "
+            "prices (spend can't be metered): refuse it with 402, or allow it with "
+            "an X-Hub-Cost-Warning header and no cost reservation."
+        ),
+    )
+    default_output_token_estimate: int = Field(
+        default=1024,
+        ge=0,
+        description="Output tokens assumed when reserving cost for a call that sets no max_tokens.",
+    )
+    reservation_ttl_seconds: float = Field(
+        default=900,
+        gt=0,
+        description="Safety net: an in-flight cost reservation that was never released expires after this long.",
+    )
+
+    @field_validator("unknown_pricing", mode="before")
+    @classmethod
+    def _normalize_unknown_pricing(cls, value: object) -> object:
+        return value.strip().lower() if isinstance(value, str) else value
 
     @property
     def allowed_email_set(self) -> set[str]:
