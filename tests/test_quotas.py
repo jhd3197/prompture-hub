@@ -13,6 +13,8 @@ from datetime import datetime, timedelta, timezone
 
 import pytest
 
+from prompture_hub.quotas import _window_start
+
 
 @pytest.fixture(autouse=True)
 def _tmp_db(monkeypatch):
@@ -213,9 +215,9 @@ def test_weekly_cap_counts_yesterday():
     """For a weekly cap, spend from earlier this week should count."""
     pt = _create_key_with_period(cap=0.50, period="week", name="weekly")
     kid = _key_id_for("weekly")
-    # Yesterday (still inside the week): $0.50 already spent.
-    yesterday = datetime.now(timezone.utc) - timedelta(days=1)
-    _seed_usage_at(kid, cost=0.50, when=yesterday)
+    # Start of the window: earliest instant that still counts. "Yesterday"
+    # would fall in the previous week on Mondays.
+    _seed_usage_at(kid, cost=0.50, when=_window_start("week"))
 
     r = _client().post(
         "/v1/chat/completions",
@@ -243,15 +245,11 @@ def test_daily_cap_does_not_count_yesterday():
     assert r.status_code != 402
 
 
-def test_monthly_cap_counts_last_week():
+def test_monthly_cap_counts_earlier_this_month():
     pt = _create_key_with_period(cap=5.00, period="month", name="monthly")
     kid = _key_id_for("monthly")
-    # Eight days ago — still inside the calendar month if today's > 8th.
-    now = datetime.now(timezone.utc)
-    if now.day <= 8:
-        pytest.skip("test is meaningful only after the 8th of the month")
-    eight_days_ago = now - timedelta(days=8)
-    _seed_usage_at(kid, cost=5.00, when=eight_days_ago)
+    # Start of the month window: inside it whatever today's date is.
+    _seed_usage_at(kid, cost=5.00, when=_window_start("month"))
 
     r = _client().post(
         "/v1/chat/completions",
