@@ -7,7 +7,7 @@ is intentionally separate from hub-issued user keys — separation of duties.
 from __future__ import annotations
 
 from datetime import datetime, timezone
-from typing import Any, Literal
+from typing import Any, ClassVar, Literal
 
 from fastapi import APIRouter, Depends, HTTPException, Query, Response, status
 from pydantic import BaseModel, Field
@@ -15,6 +15,7 @@ from sqlmodel import select
 
 from .. import audit, billing, live
 from ..auth import generate_key, require_admin
+from ..cap_alias import CapAliasBody, cap_fields, flag_deprecated, with_old_name
 from ..metering import clean_project
 from ..policies import is_expired, normalize_ip_rules, resolve_expiry
 from ..quotas import _window_start, spend_in_window
@@ -24,10 +25,10 @@ from ..storage.models import AuditLog, HubKey, SpendAdjustment, UsageRecord, Use
 router = APIRouter(dependencies=[Depends(require_admin)])
 
 
-class CreateKeyRequest(BaseModel):
+class CreateKeyRequest(CapAliasBody):
+    _cap_nullable: ClassVar[bool] = False
     name: str
     allowed_models: list[str] = Field(default_factory=list)
-    daily_spend_cap_usd: float = 1.0
     spend_period: str = Field(
         default="day",
         description="day | week | month — UTC window the spend cap resets on.",
@@ -50,7 +51,8 @@ class CreateKeyResponse(BaseModel):
     name: str
     key: str = Field(description="Plaintext key — shown ONCE. Save it now.")
     allowed_models: list[str]
-    daily_spend_cap_usd: float
+    spend_cap_usd: float
+    daily_spend_cap_usd: float = Field(description="Deprecated alias of spend_cap_usd.")
     spend_period: str
     rate_limit_per_min: int
     allowed_ips: list[str] = Field(default_factory=list)
@@ -61,7 +63,8 @@ class CreateKeyResponse(BaseModel):
 
 
 @router.post("/keys", response_model=CreateKeyResponse, status_code=status.HTTP_201_CREATED)
-def create_key(body: CreateKeyRequest) -> CreateKeyResponse:
+def create_key(body: CreateKeyRequest, response: Response) -> CreateKeyResponse:
+    flag_deprecated(body, response)
     plaintext, hashed = generate_key()
     with get_session() as session:
         user_id: int | None = None
@@ -90,7 +93,7 @@ def create_key(body: CreateKeyRequest) -> CreateKeyResponse:
             name=body.name,
             hashed_secret=hashed,
             allowed_models=body.allowed_models,
-            daily_spend_cap_usd=body.daily_spend_cap_usd,
+            spend_cap_usd=body.cap_or(1.0),
             spend_period=period,
             rate_limit_per_min=body.rate_limit_per_min,
             allowed_ips=normalize_ip_rules(body.allowed_ips),
@@ -106,7 +109,8 @@ def create_key(body: CreateKeyRequest) -> CreateKeyResponse:
             name=row.name,
             key=plaintext,
             allowed_models=row.allowed_models,
-            daily_spend_cap_usd=row.daily_spend_cap_usd,
+            spend_cap_usd=row.spend_cap_usd,
+            daily_spend_cap_usd=row.spend_cap_usd,
             spend_period=row.spend_period,
             rate_limit_per_min=row.rate_limit_per_min,
             allowed_ips=row.allowed_ips or [],
@@ -122,7 +126,7 @@ def _key_dict(r: HubKey) -> dict[str, Any]:
         "id": r.id,
         "name": r.name,
         "allowed_models": r.allowed_models,
-        "daily_spend_cap_usd": r.daily_spend_cap_usd,
+        **cap_fields(r.spend_cap_usd),
         "spend_period": r.spend_period,
         "rate_limit_per_min": r.rate_limit_per_min,
         "created_at": iso_utc(r.created_at),
@@ -146,8 +150,7 @@ def list_keys() -> list[dict[str, Any]]:
         return [_key_dict(r) for r in rows]
 
 
-class AdminKeyPatch(BaseModel):
-    daily_spend_cap_usd: float | None = Field(default=None, ge=0)
+class AdminKeyPatch(CapAliasBody):
     spend_period: str | None = Field(default=None, pattern="^(day|week|month)$")
     rate_limit_per_min: int | None = Field(default=None, ge=1)
 
@@ -168,12 +171,13 @@ def _active_key(session: Any, key_id: int) -> HubKey:
 
 
 @router.patch("/keys/{key_id}")
-def update_key(key_id: int, body: AdminKeyPatch) -> dict[str, Any]:
-    changes = body.model_dump(exclude_unset=True)
+def update_key(key_id: int, body: AdminKeyPatch, response: Response) -> dict[str, Any]:
+    flag_deprecated(body, response)
+    changes = body.changes()
     if not changes or any(v is None for v in changes.values()):
         raise HTTPException(
             status_code=status.HTTP_400_BAD_REQUEST,
-            detail="Send at least one of daily_spend_cap_usd, spend_period, rate_limit_per_min (none can be null).",
+            detail="Send at least one of spend_cap_usd, spend_period, rate_limit_per_min (none can be null).",
         )
     with get_session() as session:
         row = _active_key(session, key_id)
@@ -190,7 +194,7 @@ def update_key(key_id: int, body: AdminKeyPatch) -> dict[str, Any]:
             audit.ADMIN_ACTOR, "key.update", key_id, {"before": before, "after": {n: changes[n] for n in before}}
         )
     live.get_bus().publish(
-        "key.updated", {"key_id": key_id, "key_name": name, "changes": changes, "by": "admin"}
+        "key.updated", {"key_id": key_id, "key_name": name, "changes": with_old_name(changes), "by": "admin"}
     )
     return result
 
@@ -200,7 +204,7 @@ def _adjust_spend(key_id: int, kind: str, reason: str | None, amount: float | No
     with get_session() as session:
         row = _active_key(session, key_id)
         period = row.spend_period or "day"
-        cap = row.daily_spend_cap_usd
+        cap = row.spend_cap_usd
     before = spend_in_window(key_id, period)
     delta = -before if amount is None else -amount
     with get_session() as session:

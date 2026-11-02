@@ -44,7 +44,7 @@ def _key_limits(key: HubKey) -> dict[str, Any]:
     period = (key.spend_period or "day").lower()
     # Grants can push the window sum below zero; the public figures never go negative.
     spent = max(0.0, spend_in_window(key.id, period))
-    cap = key.daily_spend_cap_usd
+    cap = key.spend_cap_usd
     return {
         "id": key.id,
         "name": key.name,

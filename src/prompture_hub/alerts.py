@@ -181,16 +181,16 @@ def _check_key_spend(rule: AlertRule, key_id: int) -> None:
 
     with get_session() as session:
         key = session.get(HubKey, key_id)
-    if key is None or key.daily_spend_cap_usd <= 0:
+    if key is None or key.spend_cap_usd <= 0:
         return
     period = (key.spend_period or "day").lower()
-    fraction = spend_in_window(key.id, period) / key.daily_spend_cap_usd
+    fraction = spend_in_window(key.id, period) / key.spend_cap_usd
     threshold = rule.threshold if rule.threshold is not None else default_threshold("key_spend")
     if fraction >= threshold:
         fire(
             rule,
             f"key:{key.id}",
-            f"Key '{key.name}' has used {fraction:.0%} of its ${key.daily_spend_cap_usd:.2f} {period} cap.",
+            f"Key '{key.name}' has used {fraction:.0%} of its ${key.spend_cap_usd:.2f} {period} cap.",
             value=round(fraction, 4),
             key_id=key.id,
         )
