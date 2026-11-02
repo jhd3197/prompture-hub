@@ -261,3 +261,32 @@ class ProviderControl(SQLModel, table=True):
 
     provider: str = Field(primary_key=True)
     paused_at: datetime | None = Field(default=None)
+
+
+class SpendAdjustment(SQLModel, table=True):
+    """Manual credit against a key's spend in the window it was created in.
+
+    ``amount_usd`` is added to the window's spend, so negative = headroom
+    (grant or reset). Adjustments expire naturally when the window rolls over.
+    """
+
+    id: int | None = Field(default=None, primary_key=True)
+    key_id: int = Field(index=True, foreign_key="hubkey.id")
+    amount_usd: float
+    kind: str = Field(description="reset | grant")
+    reason: str | None = Field(default=None)
+    created_at: datetime = Field(default_factory=_utcnow, index=True)
+    actor_label: str = Field(default="")
+
+
+class AuditLog(SQLModel, table=True):
+    """Who changed what on a key. Never holds secrets."""
+
+    id: int | None = Field(default=None, primary_key=True)
+    created_at: datetime = Field(default_factory=_utcnow, index=True)
+    actor_kind: str = Field(description="admin | device | user")
+    actor_id: int | None = Field(default=None, description="User id or device id.")
+    actor_label: str = Field(default="")
+    action: str = Field(description="e.g. key.update, key.spend_reset, key.spend_grant")
+    key_id: int | None = Field(default=None, index=True)
+    details: dict = Field(default_factory=dict, sa_column=Column(JSON))

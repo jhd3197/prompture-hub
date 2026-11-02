@@ -34,7 +34,7 @@ from sqlmodel import select
 
 from .auth import require_hub_key
 from .storage.db import get_session
-from .storage.models import HubKey, UsageRecord
+from .storage.models import HubKey, SpendAdjustment, UsageRecord
 
 # Errors recorded for over-quota requests use these status strings so the
 # admin dashboard can distinguish them from real provider errors.
@@ -66,15 +66,23 @@ def _period_label(period: str) -> str:
 
 
 def _spend_in_window(key_id: int, period: str) -> float:
-    """Sum cost_usd inside the cap window for ``period``."""
+    """Effective spend in the cap window: usage cost plus manual adjustments made in it.
+
+    Not clamped: a grant larger than current spend yields negative spend (extra headroom).
+    """
     window_start = _window_start(period)
     with get_session() as session:
-        total = session.exec(
+        used = session.exec(
             select(func.coalesce(func.sum(UsageRecord.cost_usd), 0.0))
             .where(UsageRecord.key_id == key_id)
             .where(UsageRecord.timestamp >= window_start)
         ).one()
-    return float(total or 0.0)
+        adjusted = session.exec(
+            select(func.coalesce(func.sum(SpendAdjustment.amount_usd), 0.0))
+            .where(SpendAdjustment.key_id == key_id)
+            .where(SpendAdjustment.created_at >= window_start)
+        ).one()
+    return float(used or 0.0) + float(adjusted or 0.0)
 
 
 def _calls_in_last_minute(key_id: int) -> int:
