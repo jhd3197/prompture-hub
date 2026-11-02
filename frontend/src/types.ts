@@ -178,6 +178,34 @@ export interface AnalyticsBucket {
   fallback_rate: number;
 }
 
+export type BillingStatus =
+  | "ok" | "mismatch" | "not_configured" | "error" | "not_comparable" | "balance_only" | "unsupported";
+
+export interface BillingProvider {
+  provider: string;
+  status: BillingStatus;
+  hub_usd: number;
+  provider_usd: number | null;
+  difference_usd: number | null;
+  difference_pct: number | null;
+  balance: number | null;
+  currency: string;
+  source: string | null;
+  caveats: string[];
+  error: string | null;
+  fetched_at: string | null;
+}
+
+export interface BillingReconciliation {
+  period: "day" | "week" | "month";
+  window_start: string;
+  window_end: string;
+  generated_at: string;
+  tolerance: { pct: number; abs_usd: number };
+  providers: BillingProvider[];
+  summary: { mismatches: number; errors: number; unconfigured: number };
+}
+
 export interface Analytics {
   range: { start: string; end: string; days: number; project?: string | null };
   totals: AnalyticsBucket;

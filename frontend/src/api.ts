@@ -1,7 +1,7 @@
 import type {
   AgentsResponse, AlertEvent, AlertKind, AlertRule, Analytics, AuthProviders, ConversationDetail,
   ConversationSummary, CreatedKey, CurrentUser, CustomEndpoint, Device, EndpointUsage, HubKey,
-  ModalitiesResponse, ModelsResponse, Overview, PairingInfo,
+  BillingReconciliation, ModalitiesResponse, ModelsResponse, Overview, PairingInfo,
 } from "./types";
 
 export type AlertRuleInput = {
@@ -72,6 +72,9 @@ export const api = {
     request<Analytics>(
       `/api/analytics?days=${days}${project ? `&project=${encodeURIComponent(project)}` : ""}`,
     ),
+
+  billingReconciliation: (period: "day" | "week" | "month", refresh = false) =>
+    request<BillingReconciliation>(`/api/billing/reconciliation?period=${period}&refresh=${refresh}`),
 
   // Key controls (shared with paired companions; the dashboard session is accepted too).
   pauseKey: (id: number) => request<HubKey>(`/v1/keys/${id}/pause`, { method: "POST" }),

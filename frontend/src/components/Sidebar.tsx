@@ -1,6 +1,6 @@
 import { NavLink } from "react-router-dom";
 import {
-  IconActivity, IconCog, IconExternal, IconGrid, IconHome, IconKey, IconMessages,
+  IconActivity, IconCog, IconDollar, IconExternal, IconGrid, IconHome, IconKey, IconMessages,
   IconMoon, IconSun,
 } from "../icons";
 import { useTheme } from "../theme";
@@ -10,6 +10,7 @@ import { Brand } from "./Brand";
 const nav: Array<[string, string, (p: { style?: React.CSSProperties }) => JSX.Element]> = [
   ["/", "Home", IconHome],
   ["/analytics", "Analytics", IconActivity],
+  ["/billing", "Billing", IconDollar],
   ["/keys", "Keys", IconKey],
   ["/conversations", "Sessions", IconMessages],
   ["/models", "Models", IconGrid],
