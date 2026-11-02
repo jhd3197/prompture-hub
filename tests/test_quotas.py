@@ -53,7 +53,7 @@ def _create_key(daily_cap: float = 1.0, rate_per_min: int = 60) -> str:
         json={
             "name": "quota-test",
             "allowed_models": ["fake/model"],
-            "daily_spend_cap_usd": daily_cap,
+            "spend_cap_usd": daily_cap,
             "rate_limit_per_min": rate_per_min,
         },
     )
@@ -202,7 +202,7 @@ def _create_key_with_period(
         json={
             "name": name,
             "allowed_models": ["fake/model"],
-            "daily_spend_cap_usd": cap,
+            "spend_cap_usd": cap,
             "spend_period": period,
             "rate_limit_per_min": 1000,
         },
@@ -267,7 +267,7 @@ def test_invalid_period_returns_400():
         json={
             "name": "bad-period",
             "allowed_models": ["fake/model"],
-            "daily_spend_cap_usd": 1.0,
+            "spend_cap_usd": 1.0,
             "spend_period": "fortnight",
         },
     )

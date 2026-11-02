@@ -68,7 +68,7 @@ def _key(cap: float = 100.0, rate: int = 1000, models: list[str] | None = None) 
         json={
             "name": "hardening",
             "allowed_models": models if models is not None else [],
-            "daily_spend_cap_usd": cap,
+            "spend_cap_usd": cap,
             "rate_limit_per_min": rate,
         },
     )

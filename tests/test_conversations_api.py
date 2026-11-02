@@ -44,7 +44,7 @@ def _new_key(name: str = "conv-test") -> str:
         json={
             "name": name,
             "allowed_models": ["stub/model"],
-            "daily_spend_cap_usd": 10.0,
+            "spend_cap_usd": 10.0,
             "rate_limit_per_min": 1000,
         },
     )

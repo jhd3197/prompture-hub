@@ -67,7 +67,7 @@ def test_create_and_list_key():
         json={
             "name": "smoke-test",
             "allowed_models": ["ollama/llama3.1:8b"],
-            "daily_spend_cap_usd": 0.50,
+            "spend_cap_usd": 0.50,
         },
     )
     assert r.status_code == 201, r.text

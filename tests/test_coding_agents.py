@@ -41,7 +41,7 @@ def _new_key(daily_cap: float = 10.0, rate_per_min: int = 1000) -> str:
         json={
             "name": "agent-test",
             "allowed_models": ["claude"],
-            "daily_spend_cap_usd": daily_cap,
+            "spend_cap_usd": daily_cap,
             "rate_limit_per_min": rate_per_min,
         },
     )

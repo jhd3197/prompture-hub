@@ -46,7 +46,7 @@ def _create_key(daily_cap: float = 100.0) -> str:
         json={
             "name": "chat-test",
             "allowed_models": ["stub/model"],
-            "daily_spend_cap_usd": daily_cap,
+            "spend_cap_usd": daily_cap,
             "rate_limit_per_min": 1000,
         },
     )
