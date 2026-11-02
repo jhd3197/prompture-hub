@@ -61,7 +61,7 @@ The untrusted app never sees `OPENAI_API_KEY` (or any other real provider secret
 
 ## Status
 
-**v0.0.2** — solo / localhost / SQLite, [published on PyPI](https://pypi.org/project/prompture-hub/). The architecture (auth, key model, storage) is designed to extend to multi-user and public deployment later without rewriting the v0.x surface.
+**v0.0.3**, alpha. Solo / localhost / SQLite, requires `prompture>=1.16`, [published on PyPI](https://pypi.org/project/prompture-hub/). The hub also serves the companion API used by Prompture Desk (pairing, limits, spend, live events, pausing keys). See [CHANGELOG.md](CHANGELOG.md) for what changed in each version. The architecture (auth, key model, storage) is designed to extend to multi-user and public deployment later without rewriting the v0.x surface.
 
 ## Install
 
