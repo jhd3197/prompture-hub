@@ -70,7 +70,7 @@ def _client() -> TestClient:
 
 
 def _key(**extra) -> tuple[int, str]:
-    r = _client().post("/admin/keys", headers=ADMIN, json={"name": "app", "daily_spend_cap_usd": 1.0, **extra})
+    r = _client().post("/admin/keys", headers=ADMIN, json={"name": "app", "spend_cap_usd": 1.0, **extra})
     return r.json()["id"], r.json()["key"]
 
 
@@ -176,7 +176,7 @@ class TestEvaluation:
         assert _alerts() == []
 
     def test_fallback_and_error(self, driver):
-        _, key = _key(daily_spend_cap_usd=100.0)
+        _, key = _key(spend_cap_usd=100.0)
         _rule(kind="fallback")
         _rule(kind="error")
         driver.meta = {
@@ -195,7 +195,7 @@ class TestEvaluation:
         assert "served by groq/llama" in fallback["message"]
 
     def test_provider_headroom(self, driver):
-        _, key = _key(daily_spend_cap_usd=100.0)
+        _, key = _key(spend_cap_usd=100.0)
         _rule(kind="provider_headroom", threshold=0.1)
         now = time.time()
         driver.meta = {

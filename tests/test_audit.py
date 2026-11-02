@@ -40,7 +40,7 @@ def _client() -> TestClient:
 
 
 def _key(name: str = "app") -> int:
-    r = _client().post("/admin/keys", headers=ADMIN, json={"name": name, "daily_spend_cap_usd": 5.0})
+    r = _client().post("/admin/keys", headers=ADMIN, json={"name": name, "spend_cap_usd": 5.0})
     return r.json()["id"]
 
 
@@ -63,7 +63,7 @@ def _device(name: str, scopes: list[str]) -> dict[str, str]:
 def test_admin_update_is_audited_with_only_changed_fields():
     kid = _key()
     _client().patch(
-        f"/admin/keys/{kid}", headers=ADMIN, json={"daily_spend_cap_usd": 5.0, "rate_limit_per_min": 7}
+        f"/admin/keys/{kid}", headers=ADMIN, json={"spend_cap_usd": 5.0, "rate_limit_per_min": 7}
     )
     [row] = _audit(action="key.update")
     assert (row["actor_kind"], row["actor_label"], row["key_id"]) == ("admin", "admin token", kid)

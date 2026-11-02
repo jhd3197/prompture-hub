@@ -40,7 +40,7 @@ def _key(**extra) -> str:
     r = _client().post(
         "/admin/keys",
         headers={"Authorization": "Bearer test-token"},
-        json={"name": "claude-code", "daily_spend_cap_usd": 100.0, "rate_limit_per_min": 1000, **extra},
+        json={"name": "claude-code", "spend_cap_usd": 100.0, "rate_limit_per_min": 1000, **extra},
     )
     assert r.status_code == 201, r.text
     return r.json()["key"]

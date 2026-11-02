@@ -46,7 +46,7 @@ def _client() -> TestClient:
 
 
 def _key(**extra) -> str:
-    r = _client().post("/admin/keys", headers=ADMIN, json={"name": "app", "daily_spend_cap_usd": 100.0, **extra})
+    r = _client().post("/admin/keys", headers=ADMIN, json={"name": "app", "spend_cap_usd": 100.0, **extra})
     return r.json()["key"]
 
 

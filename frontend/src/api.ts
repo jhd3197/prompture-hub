@@ -1,7 +1,7 @@
 import type {
   AgentsResponse, AlertEvent, AlertKind, AlertRule, Analytics, AuthProviders, ConversationDetail,
   ConversationSummary, CreatedKey, CurrentUser, CustomEndpoint, Device, EndpointUsage, HubKey,
-  ModalitiesResponse, ModelsResponse, Overview, PairingInfo,
+  BillingReconciliation, ModalitiesResponse, ModelsResponse, Overview, PairingInfo,
 } from "./types";
 
 export type AlertRuleInput = {
@@ -56,7 +56,7 @@ export const api = {
   createKey: (data: {
     name: string;
     allowed_models: string[];
-    daily_spend_cap_usd: number;
+    spend_cap_usd: number;
     spend_period: "day" | "week" | "month";
     rate_limit_per_min: number;
     expires_in_days?: number | null;
@@ -73,11 +73,14 @@ export const api = {
       `/api/analytics?days=${days}${project ? `&project=${encodeURIComponent(project)}` : ""}`,
     ),
 
+  billingReconciliation: (period: "day" | "week" | "month", refresh = false) =>
+    request<BillingReconciliation>(`/api/billing/reconciliation?period=${period}&refresh=${refresh}`),
+
   // Key controls (shared with paired companions; the dashboard session is accepted too).
   pauseKey: (id: number) => request<HubKey>(`/v1/keys/${id}/pause`, { method: "POST" }),
   resumeKey: (id: number) => request<HubKey>(`/v1/keys/${id}/resume`, { method: "POST" }),
   updateKey: (id: number, data: {
-    daily_spend_cap_usd?: number;
+    spend_cap_usd?: number;
     spend_period?: "day" | "week" | "month";
     rate_limit_per_min?: number;
     route_override?: string;
