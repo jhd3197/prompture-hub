@@ -42,12 +42,9 @@ class HubKey(SQLModel, table=True):
     name: str = Field(index=True, description="Human label, e.g. 'sketchy-app-1'.")
     hashed_secret: str = Field(unique=True, index=True)
     allowed_models: list[str] = Field(default_factory=list, sa_column=Column(JSON))
-    daily_spend_cap_usd: float = Field(
+    spend_cap_usd: float = Field(
         default=1.0,
-        description=(
-            "Cap value; the period it applies over is given by ``spend_period``. "
-            "Name kept for backwards compatibility with the v0 schema."
-        ),
+        description="Cap value; the period it applies over is given by ``spend_period``.",
     )
     spend_period: str = Field(
         default="day",
