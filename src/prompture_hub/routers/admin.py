@@ -9,15 +9,17 @@ from __future__ import annotations
 from datetime import datetime, timezone
 from typing import Any
 
-from fastapi import APIRouter, Depends, HTTPException, Response, status
+from fastapi import APIRouter, Depends, HTTPException, Query, Response, status
 from pydantic import BaseModel, Field
 from sqlmodel import select
 
+from .. import audit, live
 from ..auth import generate_key, require_admin
 from ..metering import clean_project
 from ..policies import is_expired, normalize_ip_rules, resolve_expiry
+from ..quotas import _window_start, spend_in_window
 from ..storage.db import get_session
-from ..storage.models import HubKey, UsageRecord, User, iso_utc
+from ..storage.models import AuditLog, HubKey, SpendAdjustment, UsageRecord, User, iso_utc
 
 router = APIRouter(dependencies=[Depends(require_admin)])
 
@@ -115,30 +117,177 @@ def create_key(body: CreateKeyRequest) -> CreateKeyResponse:
         )
 
 
+def _key_dict(r: HubKey) -> dict[str, Any]:
+    return {
+        "id": r.id,
+        "name": r.name,
+        "allowed_models": r.allowed_models,
+        "daily_spend_cap_usd": r.daily_spend_cap_usd,
+        "spend_period": r.spend_period,
+        "rate_limit_per_min": r.rate_limit_per_min,
+        "created_at": iso_utc(r.created_at),
+        "revoked_at": iso_utc(r.revoked_at),
+        "allowed_ips": r.allowed_ips or [],
+        "expires_at": iso_utc(r.expires_at),
+        "expired": is_expired(r),
+        "active": r.revoked_at is None and not is_expired(r),
+        "user_id": r.user_id,
+        "default_project": r.default_project,
+        "paused": r.paused_at is not None,
+        "route_override": r.route_override,
+        "spent_in_window": round(spend_in_window(r.id, r.spend_period or "day"), 6),
+    }
+
+
 @router.get("/keys")
 def list_keys() -> list[dict[str, Any]]:
     with get_session() as session:
         rows = session.exec(select(HubKey).order_by(HubKey.created_at.desc())).all()
+        return [_key_dict(r) for r in rows]
+
+
+class AdminKeyPatch(BaseModel):
+    daily_spend_cap_usd: float | None = Field(default=None, ge=0)
+    spend_period: str | None = Field(default=None, pattern="^(day|week|month)$")
+    rate_limit_per_min: int | None = Field(default=None, ge=1)
+
+
+class SpendReason(BaseModel):
+    reason: str | None = Field(default=None, max_length=500)
+
+
+class GrantRequest(SpendReason):
+    amount_usd: float = Field(gt=0)
+
+
+def _active_key(session: Any, key_id: int) -> HubKey:
+    row = session.get(HubKey, key_id)
+    if not row or row.revoked_at is not None:
+        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Key not found.")
+    return row
+
+
+@router.patch("/keys/{key_id}")
+def update_key(key_id: int, body: AdminKeyPatch) -> dict[str, Any]:
+    changes = body.model_dump(exclude_unset=True)
+    if not changes or any(v is None for v in changes.values()):
+        raise HTTPException(
+            status_code=status.HTTP_400_BAD_REQUEST,
+            detail="Send at least one of daily_spend_cap_usd, spend_period, rate_limit_per_min (none can be null).",
+        )
+    with get_session() as session:
+        row = _active_key(session, key_id)
+        before = {name: getattr(row, name) for name in changes if getattr(row, name) != changes[name]}
+        for name, value in changes.items():
+            setattr(row, name, value)
+        session.add(row)
+        session.commit()
+        session.refresh(row)
+        result = _key_dict(row)
+        name = row.name
+    if before:
+        audit.record(
+            audit.ADMIN_ACTOR, "key.update", key_id, {"before": before, "after": {n: changes[n] for n in before}}
+        )
+    live.get_bus().publish(
+        "key.updated", {"key_id": key_id, "key_name": name, "changes": changes, "by": "admin"}
+    )
+    return result
+
+
+def _adjust_spend(key_id: int, kind: str, reason: str | None, amount: float | None) -> dict[str, Any]:
+    """Insert a SpendAdjustment (``amount`` None = bring the window to exactly zero) and audit it."""
+    with get_session() as session:
+        row = _active_key(session, key_id)
+        period = row.spend_period or "day"
+        cap = row.daily_spend_cap_usd
+    before = spend_in_window(key_id, period)
+    delta = -before if amount is None else -amount
+    with get_session() as session:
+        session.add(
+            SpendAdjustment(
+                key_id=key_id, amount_usd=delta, kind=kind, reason=reason, actor_label=audit.ADMIN_LABEL
+            )
+        )
+        session.commit()
+    after = spend_in_window(key_id, period)
+    details: dict[str, Any] = {
+        "spent_before": round(before, 6),
+        "spent_after": round(after, 6),
+        "window": iso_utc(_window_start(period)),
+        "period": period,
+        "reason": reason,
+    }
+    if kind == "grant":
+        details["amount_usd"] = amount
+    audit.record(audit.ADMIN_ACTOR, f"key.spend_{kind}", key_id, details)
+    return {
+        "key_id": key_id,
+        "period": period,
+        "spent_before": round(before, 6),
+        "spent_after": round(after, 6),
+        "cap": cap,
+    }
+
+
+@router.post("/keys/{key_id}/reset-spend")
+def reset_spend(key_id: int, body: SpendReason | None = None) -> dict[str, Any]:
+    return _adjust_spend(key_id, "reset", body.reason if body else None, None)
+
+
+@router.post("/keys/{key_id}/grant")
+def grant_spend(key_id: int, body: GrantRequest) -> dict[str, Any]:
+    return _adjust_spend(key_id, "grant", body.reason, body.amount_usd)
+
+
+@router.get("/keys/{key_id}/adjustments")
+def list_adjustments(key_id: int) -> list[dict[str, Any]]:
+    """Adjustments that count toward the key's current window."""
+    with get_session() as session:
+        row = session.get(HubKey, key_id)
+        if not row:
+            raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Key not found.")
+        stmt = (
+            select(SpendAdjustment)
+            .where(SpendAdjustment.key_id == key_id)
+            .where(SpendAdjustment.created_at >= _window_start(row.spend_period or "day"))
+            .order_by(SpendAdjustment.created_at.desc(), SpendAdjustment.id.desc())
+        )
         return [
             {
-                "id": r.id,
-                "name": r.name,
-                "allowed_models": r.allowed_models,
-                "daily_spend_cap_usd": r.daily_spend_cap_usd,
-                "spend_period": r.spend_period,
-                "rate_limit_per_min": r.rate_limit_per_min,
-                "created_at": iso_utc(r.created_at),
-                "revoked_at": iso_utc(r.revoked_at),
-                "allowed_ips": r.allowed_ips or [],
-                "expires_at": iso_utc(r.expires_at),
-                "expired": is_expired(r),
-                "active": r.revoked_at is None and not is_expired(r),
-                "user_id": r.user_id,
-                "default_project": r.default_project,
-                "paused": r.paused_at is not None,
-                "route_override": r.route_override,
+                "id": a.id,
+                "amount_usd": a.amount_usd,
+                "kind": a.kind,
+                "reason": a.reason,
+                "actor_label": a.actor_label,
+                "created_at": iso_utc(a.created_at),
             }
-            for r in rows
+            for a in session.exec(stmt).all()
+        ]
+
+
+@router.get("/audit")
+def list_audit(
+    key_id: int | None = None, action: str | None = None, limit: int = Query(default=100, ge=1, le=500)
+) -> list[dict[str, Any]]:
+    with get_session() as session:
+        stmt = select(AuditLog).order_by(AuditLog.created_at.desc(), AuditLog.id.desc()).limit(limit)
+        if key_id is not None:
+            stmt = stmt.where(AuditLog.key_id == key_id)
+        if action:
+            stmt = stmt.where(AuditLog.action == action)
+        return [
+            {
+                "id": a.id,
+                "created_at": iso_utc(a.created_at),
+                "actor_kind": a.actor_kind,
+                "actor_id": a.actor_id,
+                "actor_label": a.actor_label,
+                "action": a.action,
+                "key_id": a.key_id,
+                "details": a.details,
+            }
+            for a in session.exec(stmt).all()
         ]
 
 

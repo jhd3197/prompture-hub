@@ -1,7 +1,7 @@
 """Key and provider controls a companion (``control`` scope) or the dashboard can apply.
 
 - ``POST  /v1/keys/{id}/pause`` / ``/resume`` — refuse or re-allow calls on a key.
-- ``PATCH /v1/keys/{id}`` — change the spend cap / period, route override
+- ``PATCH /v1/keys/{id}`` — change the spend cap / period, rate limit, route override
   or default project.
 - ``POST  /v1/providers/{name}/pause`` / ``/resume`` — refuse or re-allow every
   direct call to one upstream provider (admin-level: callers who see every key).
@@ -18,7 +18,7 @@ from typing import Any
 from fastapi import APIRouter, Depends, HTTPException, status
 from pydantic import BaseModel, Field
 
-from .. import live
+from .. import audit, live
 from ..companion_auth import Principal, require_control, visible_key_ids
 from ..metering import clean_project
 from ..storage.db import get_session
@@ -30,6 +30,7 @@ router = APIRouter()
 class KeyControlPatch(BaseModel):
     daily_spend_cap_usd: float | None = Field(default=None, ge=0)
     spend_period: str | None = Field(default=None, pattern="^(day|week|month)$")
+    rate_limit_per_min: int | None = Field(default=None, ge=1)
     route_override: str | None = Field(
         default=None, max_length=200, description="Model / combo to serve every chat call; empty string clears it."
     )
@@ -54,6 +55,7 @@ def _state(key: HubKey) -> dict[str, Any]:
         "default_project": key.default_project,
         "daily_spend_cap_usd": key.daily_spend_cap_usd,
         "spend_period": key.spend_period,
+        "rate_limit_per_min": key.rate_limit_per_min,
     }
 
 
@@ -99,10 +101,13 @@ def update_key(key_id: int, body: KeyControlPatch, principal: Principal = Depend
         changes["route_override"] = route or None
     if "default_project" in changes:
         changes["default_project"] = clean_project(changes["default_project"])
-    if changes.get("daily_spend_cap_usd", 0) is None or changes.get("spend_period", "day") is None:
-        raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail="Cap and period cannot be cleared.")
+    if any(changes.get(f, 0) is None for f in ("daily_spend_cap_usd", "spend_period", "rate_limit_per_min")):
+        raise HTTPException(
+            status_code=status.HTTP_400_BAD_REQUEST, detail="Cap, period and rate limit cannot be cleared."
+        )
     with get_session() as session:
         key = _load(session, key_id, principal)
+        before = {name: getattr(key, name) for name in changes if getattr(key, name) != changes[name]}
         for name, value in changes.items():
             setattr(key, name, value)
         session.add(key)
@@ -110,7 +115,12 @@ def update_key(key_id: int, body: KeyControlPatch, principal: Principal = Depend
         session.refresh(key)
         if changes:
             _announce(key, changes, principal)
-        return _state(key)
+        state = _state(key)
+    if before:
+        audit.record(
+            principal, "key.update", key_id, {"before": before, "after": {name: changes[name] for name in before}}
+        )
+    return state
 
 
 def _set_provider_paused(name: str, paused: bool, principal: Principal) -> dict[str, Any]:

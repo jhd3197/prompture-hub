@@ -217,9 +217,23 @@ Tokens are listed and revocable under **Settings › Devices**. `GET /v1/compani
 | `GET /v1/limits` | read | Each key's spend cap and rate limit, provider rate-limit headroom (from the headers providers send on every response) and provider account balances. Every figure says where it came from. |
 | `GET /v1/spend?period=day\|week\|month` | read | Spend in the current UTC period, split by project, key and model. |
 | `GET /v1/alerts` | read | Recent alerts. `POST /v1/alerts/{id}/ack` needs control scope. |
-| `POST /v1/keys/{id}/pause` · `/resume` · `PATCH /v1/keys/{id}` | control | Pause a key, set a route override (serve every chat call on the key with a chosen model or combo), or change its cap, period or default project. |
+| `POST /v1/keys/{id}/pause` · `/resume` · `PATCH /v1/keys/{id}` | control | Pause a key, set a route override (serve every chat call on the key with a chosen model or combo), or change its cap, period, rate limit or default project. Changes are recorded in the audit log. |
 
 The dashboard session and `HUB_ADMIN_TOKEN` also work on these endpoints. When dashboard login is on, a device paired by a user sees only that user's keys. Provider headroom and account balances are shown only to callers who can see every key.
+
+### Admin cap controls
+
+These need the `HUB_ADMIN_TOKEN`. Spend adjustments count only in the cap window they were made in, so they lapse when the window rolls over. A grant larger than the current spend leaves extra headroom above the cap.
+
+| Endpoint | What it does |
+|---|---|
+| `PATCH /admin/keys/{id}` | Change `daily_spend_cap_usd`, `spend_period` and `rate_limit_per_min`. At least one field is required; revoked keys return 404. |
+| `POST /admin/keys/{id}/reset-spend` | Bring the key's spend in the current window to zero. Optional `reason`. |
+| `POST /admin/keys/{id}/grant` | Credit `amount_usd` (> 0) against the current window. Optional `reason`. |
+| `GET /admin/keys/{id}/adjustments` | Adjustments counting toward the current window. |
+| `GET /admin/audit?key_id=&action=&limit=` | Audit log of key changes, newest first (limit up to 500): who, when, and the before and after values. |
+
+The dashboard's **Edit limits** button on the Keys page changes the cap, period and rate limit through `PATCH /v1/keys/{id}`.
 
 ### Alerts
 
