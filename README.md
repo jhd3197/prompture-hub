@@ -61,7 +61,7 @@ The untrusted app never sees `OPENAI_API_KEY` (or any other real provider secret
 
 ## Status
 
-**v0.0.2** — solo / localhost / SQLite, [published on PyPI](https://pypi.org/project/prompture-hub/). The architecture (auth, key model, storage) is designed to extend to multi-user and public deployment later without rewriting the v0.x surface.
+**v0.0.3**, alpha. Solo / localhost / SQLite, requires `prompture>=1.16`, [published on PyPI](https://pypi.org/project/prompture-hub/). The hub also serves the companion API used by Prompture Desk (pairing, limits, spend, live events, pausing keys). See [CHANGELOG.md](CHANGELOG.md) for what changed in each version. The architecture (auth, key model, storage) is designed to extend to multi-user and public deployment later without rewriting the v0.x surface.
 
 ## Install
 
@@ -217,9 +217,55 @@ Tokens are listed and revocable under **Settings › Devices**. `GET /v1/compani
 | `GET /v1/limits` | read | Each key's spend cap and rate limit, provider rate-limit headroom (from the headers providers send on every response) and provider account balances. Every figure says where it came from. |
 | `GET /v1/spend?period=day\|week\|month` | read | Spend in the current UTC period, split by project, key and model. |
 | `GET /v1/alerts` | read | Recent alerts. `POST /v1/alerts/{id}/ack` needs control scope. |
-| `POST /v1/keys/{id}/pause` · `/resume` · `PATCH /v1/keys/{id}` | control | Pause a key, set a route override (serve every chat call on the key with a chosen model or combo), or change its cap, period or default project. |
+| `POST /v1/keys/{id}/pause` · `/resume` · `PATCH /v1/keys/{id}` | control | Pause a key, set a route override (serve every chat call on the key with a chosen model or combo), or change its cap, period, rate limit or default project. Changes are recorded in the audit log. |
 
 The dashboard session and `HUB_ADMIN_TOKEN` also work on these endpoints. When dashboard login is on, a device paired by a user sees only that user's keys. Provider headroom and account balances are shown only to callers who can see every key.
+
+### Admin cap controls
+
+These need the `HUB_ADMIN_TOKEN`. Spend adjustments count only in the cap window they were made in, so they lapse when the window rolls over. A grant larger than the current spend leaves extra headroom above the cap.
+
+| Endpoint | What it does |
+|---|---|
+| `PATCH /admin/keys/{id}` | Change `daily_spend_cap_usd`, `spend_period` and `rate_limit_per_min`. At least one field is required; revoked keys return 404. |
+| `POST /admin/keys/{id}/reset-spend` | Bring the key's spend in the current window to zero. Optional `reason`. |
+| `POST /admin/keys/{id}/grant` | Credit `amount_usd` (> 0) against the current window. Optional `reason`. |
+| `GET /admin/keys/{id}/adjustments` | Adjustments counting toward the current window. |
+| `GET /admin/audit?key_id=&action=&limit=` | Audit log of key changes, newest first (limit up to 500): who, when, and the before and after values. |
+
+The dashboard's **Edit limits** button on the Keys page changes the cap, period and rate limit through `PATCH /v1/keys/{id}`.
+
+### Spend-cap enforcement
+
+Calls to `/v1/chat/completions` (stream and non-stream), `/v1/embeddings`, `/v1/messages`, `/v1/responses` and `/v1/extract` are checked against the key's spend cap and rate limit before the provider is called. Usage rows are only written when a call finishes, so each admitted call also holds a **cost reservation** until it settles; concurrent and streaming calls therefore cannot all pass on the same headroom, and calls still in flight count toward the per-minute rate limit.
+
+- The estimate is `estimated input tokens x input price + output tokens x output price`, with prices from Prompture's rate tables. Input tokens are a rough `chars / 4` heuristic; output tokens are the request's `max_tokens` / `max_completion_tokens` / `max_output_tokens`, else `HUB_DEFAULT_OUTPUT_TOKEN_ESTIMATE`. A large `max_tokens` on a small cap can be refused even if the real answer would be short.
+- A reservation is released when the call is recorded, errors, or the client disconnects. `HUB_RESERVATION_TTL_SECONDS` expires any that leak.
+- Virtual models are priced conservatively: a `combo/` or `auto/` route is the most expensive of its targets, `fusion/` is the sum of its panel and judge, and any unpriced target makes the whole route unpriced.
+- Local providers (Ollama, LM Studio, `local_http`, ...) and models with explicit zero rates are priced at 0, not unknown.
+
+| Setting | Default | Meaning |
+| --- | --- | --- |
+| `HUB_UNKNOWN_PRICING` | `block` | `block` refuses a model with no known prices (402 `pricing_unknown`). `warn` allows it, logs a warning, sets `X-Hub-Cost-Warning: unknown-pricing` and reserves nothing. Anything else is rejected at startup. |
+| `HUB_DEFAULT_OUTPUT_TOKEN_ESTIMATE` | `1024` | Output tokens assumed when the request sets no max. |
+| `HUB_RESERVATION_TTL_SECONDS` | `900` | Safety expiry for a reservation that was never released. |
+
+Refusals keep `detail` and add an `error` object:
+
+```json
+{"detail": "Spend cap of $5.00 per day would be exceeded ...",
+ "error": {"code": "spend_cap_would_exceed", "type": "insufficient_quota", "message": "...",
+           "period": "day", "cap_usd": 5.0, "spent_usd": 4.2, "reserved_usd": 0.6, "estimated_usd": 0.5,
+           "window_start": "2026-01-01T00:00:00Z", "window_resets_at": "2026-01-02T00:00:00Z"}}
+```
+
+Codes: `spend_cap_exceeded` (402, cap already reached), `spend_cap_would_exceed` (402, the estimate plus reservations would pass it), `pricing_unknown` (402, with `model` and `setting`), and `rate_limit_exceeded` (429, with `limit_per_min`, `in_last_minute`, `retry_after_seconds` and a `Retry-After` header). `GET /v1/limits` shows `reserved_usd` next to `spent_usd`.
+
+Caveats:
+- The ledger is process-local: it assumes one hub process (the Docker image runs one uvicorn). With several workers each only sees its own reservations.
+- Estimates are heuristics; the real cost is still recorded after the call, so a call can finish above its estimate.
+- Coding-agent runs (`/v1/coding-agents/run`) have no per-token price and are not reserved; they only get the early cap and rate-limit check.
+- Custom `openai_compatible/<profile>/...` models count as unpriced unless Prompture knows their rates.
 
 ### Alerts
 

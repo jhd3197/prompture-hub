@@ -11,12 +11,13 @@ import time
 from collections.abc import Iterator
 from typing import Any
 
-from fastapi import APIRouter, Depends, HTTPException, Request, status
+from fastapi import APIRouter, Depends, HTTPException, Request, Response, status
 from fastapi.concurrency import run_in_threadpool
 from fastapi.responses import StreamingResponse
 from prompture.gateway import (
     SSE_HEADERS,
     ChatOutcome,
+    estimate_input_tokens,
     live_events_for,
     response_object,
     responses_sse,
@@ -28,9 +29,9 @@ from prompture.gateway import (
 from .. import metering
 from ..metering import request_project
 from ..pipeline import after_turn, prepare_messages
-from ..quotas import enforce_quotas
+from ..quotas import admit, enforce_quotas
 from ..storage.models import HubKey
-from .openai_compat import _record
+from .openai_compat import _record, cost_warning
 
 router = APIRouter()
 
@@ -40,6 +41,7 @@ _ENDPOINT = "/v1/responses"
 @router.post("/responses")
 async def responses(
     request: Request,
+    response: Response,
     key: HubKey = Depends(enforce_quotas),
     project: str | None = Depends(request_project),
 ):
@@ -64,7 +66,13 @@ async def responses(
 
     routed = metering.effective_model(key, model)
     driver = get_driver_for_model(routed)
-    call = metering.begin(key, model, _ENDPOINT, project, stream=bool(body.get("stream")), routed_to=routed)
+    res = admit(
+        key, model, _ENDPOINT, project, served_by=routed,
+        input_tokens=estimate_input_tokens(msgs, tools), output_tokens=body.get("max_output_tokens"),
+    )
+    call = metering.begin(
+        key, model, _ENDPOINT, project, stream=bool(body.get("stream")), routed_to=routed, reservation=res
+    )
     started = time.perf_counter()
 
     def record(outcome: ChatOutcome) -> None:
@@ -94,15 +102,21 @@ async def responses(
             finally:
                 call.close()
 
-        return StreamingResponse(event_gen(), media_type="text/event-stream", headers=SSE_HEADERS)
+        return StreamingResponse(
+            event_gen(), media_type="text/event-stream", headers={**SSE_HEADERS, **cost_warning(res)}
+        )
 
+    response.headers.update(cost_warning(res))
     try:
-        outcome = await run_in_threadpool(run_chat, driver, msgs, options, tools=tools or None)
-    except NotImplementedError as exc:
-        record(ChatOutcome(error=exc))
-        raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail=str(exc)) from exc
-    except Exception as exc:
-        record(ChatOutcome(error=exc))
-        raise HTTPException(status_code=status.HTTP_502_BAD_GATEWAY, detail=str(exc)) from exc
-    record(outcome)
+        try:
+            outcome = await run_in_threadpool(run_chat, driver, msgs, options, tools=tools or None)
+        except NotImplementedError as exc:
+            record(ChatOutcome(error=exc))
+            raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail=str(exc)) from exc
+        except Exception as exc:
+            record(ChatOutcome(error=exc))
+            raise HTTPException(status_code=status.HTTP_502_BAD_GATEWAY, detail=str(exc)) from exc
+        record(outcome)
+    finally:
+        call.release()
     return response_object(outcome, model=model)

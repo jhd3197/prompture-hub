@@ -5,8 +5,10 @@ name: Release to PyPI
 # (so the published package needs no Node), publishes to PyPI via Trusted
 # Publishing (OIDC — no stored token), and cuts a GitHub Release.
 #
-# One-time PyPI setup: a Trusted Publisher for project "prompture-hub" ->
-# owner jhd3197, repo prompture-hub, workflow "release.yml", environment "pypi".
+# One-time PyPI setup (PyPI-side, not in this repo): add a Trusted Publisher for
+# project "prompture-hub" with owner jhd3197, repository prompture-hub,
+# workflow filename release.yml, environment name pypi. Without it the publish
+# step fails with `invalid-publisher`.
 
 on:
   push:

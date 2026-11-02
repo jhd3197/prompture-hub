@@ -18,7 +18,7 @@ import time
 from collections.abc import Iterator
 from typing import Any
 
-from fastapi import APIRouter, Depends, HTTPException, status
+from fastapi import APIRouter, Depends, HTTPException, Response, status
 from fastapi.concurrency import run_in_threadpool
 from fastapi.responses import StreamingResponse
 from prompture.gateway import (
@@ -26,6 +26,7 @@ from prompture.gateway import (
     SSE_HEADERS,
     ChatOutcome,
     driver_options,
+    estimate_input_tokens,
     flatten_content,
     models_list,
     new_completion_id,
@@ -40,7 +41,8 @@ from .. import metering
 from ..auth import require_hub_key
 from ..metering import request_project
 from ..pipeline import after_turn, prepare_messages
-from ..quotas import enforce_quotas
+from ..quotas import admit, enforce_quotas
+from ..reservations import Reservation
 from ..storage.db import get_session
 from ..storage.models import Conversation, HubKey
 from .conversations import append_messages, load_history
@@ -48,6 +50,12 @@ from .conversations import append_messages, load_history
 router = APIRouter()
 
 _ENDPOINT = "/v1/chat/completions"
+COST_WARNING_HEADER = "X-Hub-Cost-Warning"
+
+
+def cost_warning(res: Reservation) -> dict[str, str]:
+    """Response header telling the caller its spend isn't metered against the cap."""
+    return {COST_WARNING_HEADER: "unknown-pricing"} if res.unknown_pricing else {}
 
 
 class ChatMessage(BaseModel):
@@ -135,9 +143,20 @@ def _persist(body: ChatCompletionsRequest, outcome: ChatOutcome) -> None:
     append_messages(body.conversation_id, new_items)
 
 
+def _admit_chat(
+    body: ChatCompletionsRequest, key: HubKey, messages: list[dict[str, Any]], project: str | None, routed: str
+) -> Reservation:
+    return admit(
+        key, body.model, _ENDPOINT, project, served_by=routed,
+        input_tokens=estimate_input_tokens(messages, body.tools),
+        output_tokens=body.max_completion_tokens or body.max_tokens,
+    )
+
+
 @router.post("/chat/completions")
 async def chat_completions(
     body: ChatCompletionsRequest,
+    response: Response,
     key: HubKey = Depends(enforce_quotas),
     project: str | None = Depends(request_project),
 ):
@@ -149,29 +168,34 @@ async def chat_completions(
     driver = get_driver_for_model(routed)
 
     if body.stream:
-        return _stream_response(driver, body, key, messages, options, project)
+        return _stream_response(driver, body, key, messages, options, project, routed)
 
-    call = metering.begin(key, body.model, _ENDPOINT, project, routed_to=routed)
+    res = _admit_chat(body, key, messages, project, routed)
+    response.headers.update(cost_warning(res))
+    call = metering.begin(key, body.model, _ENDPOINT, project, routed_to=routed, reservation=res)
     started = time.perf_counter()
     try:
-        outcome = await run_in_threadpool(run_chat, driver, messages, options, tools=body.tools)
-    except NotImplementedError as exc:
-        _record(key.id, body.model, 0, 0, 0.0, 0, "error", str(exc), project=project, call=call)
-        raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail=str(exc)) from exc
-    except Exception as exc:
-        # A resilient route that ran out of targets carries its attempt trace.
-        route = {"attempts": getattr(exc, "attempts", None) or []}
-        _record(key.id, body.model, 0, 0, 0.0, 0, "error", str(exc), route=route, project=project, call=call)
-        raise HTTPException(status_code=status.HTTP_502_BAD_GATEWAY, detail=str(exc)) from exc
+        try:
+            outcome = await run_in_threadpool(run_chat, driver, messages, options, tools=body.tools)
+        except NotImplementedError as exc:
+            _record(key.id, body.model, 0, 0, 0.0, 0, "error", str(exc), project=project, call=call)
+            raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail=str(exc)) from exc
+        except Exception as exc:
+            # A resilient route that ran out of targets carries its attempt trace.
+            route = {"attempts": getattr(exc, "attempts", None) or []}
+            _record(key.id, body.model, 0, 0, 0.0, 0, "error", str(exc), route=route, project=project, call=call)
+            raise HTTPException(status_code=status.HTTP_502_BAD_GATEWAY, detail=str(exc)) from exc
 
-    after_turn(outcome)
-    usage = outcome.usage
-    _record(
-        key.id, body.model, usage["prompt_tokens"], usage["completion_tokens"],
-        outcome.cost, int((time.perf_counter() - started) * 1000), "ok", None,
-        meta=outcome.meta, project=project, call=call,
-    )
-    _persist(body, outcome)
+        after_turn(outcome)
+        usage = outcome.usage
+        _record(
+            key.id, body.model, usage["prompt_tokens"], usage["completion_tokens"],
+            outcome.cost, int((time.perf_counter() - started) * 1000), "ok", None,
+            meta=outcome.meta, project=project, call=call,
+        )
+        _persist(body, outcome)
+    finally:
+        call.release()
     return outcome.to_completion(body.model, extra={"conversation_id": body.conversation_id})
 
 
@@ -187,6 +211,7 @@ def _stream_response(
     messages: list[dict[str, Any]],
     options: dict[str, Any],
     project: str | None = None,
+    routed: str | None = None,
 ) -> StreamingResponse:
     # Every Prompture driver inherits ``generate_messages_stream`` (it raises
     # NotImplementedError), so the capability flag is the real signal.
@@ -207,9 +232,8 @@ def _stream_response(
             detail="Streaming with tools is not supported yet. Retry with stream=false.",
         )
 
-    call = metering.begin(
-        key, body.model, _ENDPOINT, project, stream=True, routed_to=metering.effective_model(key, body.model)
-    )
+    res = _admit_chat(body, key, messages, project, routed or body.model)
+    call = metering.begin(key, body.model, _ENDPOINT, project, stream=True, routed_to=routed, reservation=res)
     started = time.perf_counter()
 
     def on_complete(outcome: ChatOutcome) -> None:
@@ -231,14 +255,14 @@ def _stream_response(
     include_usage = bool((body.stream_options or {}).get("include_usage", True))
 
     def event_gen() -> Iterator[str]:
-        chunks = stream_chat_chunks(
-            driver.generate_messages_stream(messages, options),
-            model=body.model,
-            completion_id=new_completion_id(),
-            include_usage=include_usage,
-            on_complete=on_complete,
-        )
         try:
+            chunks = stream_chat_chunks(
+                driver.generate_messages_stream(messages, options),
+                model=body.model,
+                completion_id=new_completion_id(),
+                include_usage=include_usage,
+                on_complete=on_complete,
+            )
             for chunk in chunks:
                 call.mark_first_token()
                 yield sse(chunk)
@@ -246,7 +270,9 @@ def _stream_response(
         finally:
             call.close()
 
-    return StreamingResponse(event_gen(), media_type="text/event-stream", headers=SSE_HEADERS)
+    return StreamingResponse(
+        event_gen(), media_type="text/event-stream", headers={**SSE_HEADERS, **cost_warning(res)}
+    )
 
 
 # ---------------------------------------------------------------------------
@@ -266,6 +292,7 @@ class EmbeddingsRequest(BaseModel):
 @router.post("/embeddings")
 async def embeddings(
     body: EmbeddingsRequest,
+    response: Response,
     key: HubKey = Depends(enforce_quotas),
     project: str | None = Depends(request_project),
 ) -> dict[str, Any]:
@@ -274,6 +301,7 @@ async def embeddings(
             status_code=status.HTTP_403_FORBIDDEN,
             detail=f"Model '{body.model}' is not in this key's allowed_models whitelist.",
         )
+    metering.check_not_paused(body.model)
     from prompture.drivers.embedding_registry import get_async_embedding_driver_for_model
 
     try:
@@ -286,23 +314,35 @@ async def embeddings(
     if body.dimensions is not None:
         options["dimensions"] = body.dimensions
 
-    call = metering.begin(key, body.model, "/v1/embeddings", project)
+    res = admit(
+        key, body.model, "/v1/embeddings", project,
+        input_tokens=estimate_input_tokens([{"content": t} for t in inputs]), output_tokens=0,
+    )
+    response.headers.update(cost_warning(res))
+    call = metering.begin(key, body.model, "/v1/embeddings", project, reservation=res)
     started = time.perf_counter()
     try:
-        result = await driver.embed(inputs, options)
-    except Exception as exc:
-        _record(
-            key.id, body.model, 0, 0, 0.0, 0, "error", str(exc), endpoint="/v1/embeddings", project=project, call=call
-        )
-        raise HTTPException(status_code=status.HTTP_502_BAD_GATEWAY, detail=str(exc)) from exc
+        try:
+            result = await driver.embed(inputs, options)
+        except Exception as exc:
+            _record(
+                key.id, body.model, 0, 0, 0.0, 0, "error", str(exc), endpoint="/v1/embeddings",
+                project=project, call=call,
+            )
+            raise HTTPException(status_code=status.HTTP_502_BAD_GATEWAY, detail=str(exc)) from exc
 
-    meta = result.get("meta", {}) or {}
-    tokens = int(meta.get("total_tokens", meta.get("prompt_tokens", 0)) or 0)
-    _record(
-        key.id, body.model, tokens, 0, float(meta.get("cost", 0.0) or 0.0),
-        int((time.perf_counter() - started) * 1000), "ok", None, endpoint="/v1/embeddings", project=project,
-        call=call,
-    )
+        meta = result.get("meta", {}) or {}
+        tokens = int(meta.get("total_tokens", meta.get("prompt_tokens", 0)) or 0)
+        cost = float(meta.get("cost") or 0.0)
+        if not cost and tokens and res.rates is not None:
+            cost = res.rates.cost(tokens, 0)  # the driver reported none; price it from Prompture's rates
+        _record(
+            key.id, body.model, tokens, 0, cost,
+            int((time.perf_counter() - started) * 1000), "ok", None, endpoint="/v1/embeddings", project=project,
+            call=call,
+        )
+    finally:
+        call.release()
     return {
         "object": "list",
         "data": [{"object": "embedding", "embedding": vec, "index": i} for i, vec in enumerate(result["embeddings"])],
