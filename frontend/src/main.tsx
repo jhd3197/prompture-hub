@@ -9,6 +9,7 @@ import "./styles/controls.css";
 import "./styles/data.css";
 import "./styles/pages.css";
 import "./styles/home.css";
+import "./styles/sessions.css";
 
 createRoot(document.getElementById("root")!).render(
   <StrictMode>

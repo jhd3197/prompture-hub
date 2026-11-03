@@ -2,6 +2,8 @@ import { useState } from "react";
 import { Link, useNavigate } from "react-router-dom";
 import { ApiError, api } from "../api";
 import { ModelGroupedPicker } from "../components/ModelGroupedPicker";
+import { Meter } from "../components/charts/Meter";
+import { PageHead } from "../components/PageHead";
 import { useToast } from "../components/Toast";
 import {
   IconAlert, IconCheck, IconChevronRight, IconClock, IconKey, IconX,
@@ -105,42 +107,27 @@ export function CreateKeyPage() {
   };
 
   const effectiveModelCount = allowAnyModel ? "any model" : modelList.length === 0
-    ? "no models yet — pick at least one or enable Any model"
+    ? "no models yet, pick at least one or enable Any model"
     : `${modelList.length} model${modelList.length > 1 ? "s" : ""}`;
 
   return (
     <div className="container">
-      {/* breadcrumb */}
-      <div
-        className="row"
-        style={{ gap: 6, color: "var(--text-3)", fontSize: 12.5, marginBottom: 10 }}
-      >
-        <Link to="/keys" style={{ color: "inherit" }}>Hub keys</Link>
-        <IconChevronRight style={{ width: 12, height: 12 }} />
-        <span style={{ color: "var(--text)", fontWeight: 600 }}>New key</span>
-      </div>
+      <nav className="crumbs" aria-label="Breadcrumb">
+        <Link to="/keys">Hub keys</Link>
+        <IconChevronRight />
+        <span aria-current="page" style={{ color: "var(--ink)", fontWeight: 600 }}>New key</span>
+      </nav>
 
-      <div className="page-head">
-        <div className="grow">
-          <h1 className="page-title">Issue a hub key</h1>
-          <p className="page-sub">
-            A scoped credential your app sends as a Bearer token. It maps to
-            real provider keys without ever exposing them. You'll see the
-            plaintext exactly once — copy it before you leave the next page.
-          </p>
-        </div>
-        <Link to="/keys" className="btn btn-ghost">
-          <IconX style={{ width: 14, height: 14 }} />Cancel
-        </Link>
-      </div>
+      <PageHead
+        title="Issue a hub key" docTitle="New hub key"
+        sub="A scoped credential your app sends as a Bearer token. It maps to real provider keys without ever exposing them. You'll see the plaintext exactly once, so copy it before you leave the next page."
+      >
+        <Link to="/keys" className="btn btn-ghost"><IconX />Cancel</Link>
+      </PageHead>
 
       {error && (
-        <div className="discovery-fail mb16" role="alert" style={{
-          borderRadius: "var(--r-md)",
-          border: "1px solid var(--danger)",
-          background: "var(--danger-soft)",
-        }}>
-          <IconAlert style={{ color: "var(--danger)" }} />
+        <div className="notice bad mb16" role="alert">
+          <IconAlert />
           <span className="mono" style={{ wordBreak: "break-word" }}>{error}</span>
         </div>
       )}
@@ -191,7 +178,7 @@ export function CreateKeyPage() {
                   Allow any model
                 </div>
                 <div className="faint" style={{ fontSize: 12 }}>
-                  Skip the picker — this key will be accepted for any model the
+                  Skip the picker. This key will be accepted for any model the
                   hub knows how to route. Useful for trusted apps under your control.
                 </div>
               </div>
@@ -329,7 +316,7 @@ export function CreateKeyPage() {
                 </div>
                 <input
                   id="k-ips" className="input mono"
-                  placeholder="any IP — e.g. 10.0.0.0/24, 203.0.113.7"
+                  placeholder="any IP, e.g. 10.0.0.0/24, 203.0.113.7"
                   value={ipText} onChange={e => setIpText(e.target.value)}
                 />
                 <span className="hint">Calls from other addresses get a 403.</span>
@@ -339,7 +326,7 @@ export function CreateKeyPage() {
         </div>
 
         {/* summary sticky aside */}
-        <aside style={{ position: "sticky", top: 80 }}>
+        <aside style={{ position: "sticky", top: "calc(var(--bar-h) + 24px)" }}>
           <div className="card card-pad">
             <h2 className="section-title" style={{ marginBottom: 12 }}>Summary</h2>
 
@@ -354,7 +341,7 @@ export function CreateKeyPage() {
             >
               <dt className="faint">Name</dt>
               <dd style={{ margin: 0, fontWeight: 600 }}>
-                {name || <span className="faint">—</span>}
+                {name || <span className="faint">not set</span>}
               </dd>
 
               <dt className="faint">Models</dt>
@@ -383,6 +370,16 @@ export function CreateKeyPage() {
                 {ipCount ? `${ipCount} allowed range${ipCount > 1 ? "s" : ""}` : "any"}
               </dd>
             </dl>
+
+            {capOk && (
+              <div style={{ marginTop: 16 }}>
+                <p className="caption" style={{ marginBottom: 4 }}>Alarm points on this cap</p>
+                <Meter used={0} cap={capNumber} label="Cap scale with alarm points at 70% and 90%" hideText />
+                <div className="meter-scale" aria-hidden="true">
+                  <span>$0</span><span>70% ${(capNumber * 0.7).toFixed(2)}</span><span>90% ${(capNumber * 0.9).toFixed(2)}</span><span>${capNumber.toFixed(2)}</span>
+                </div>
+              </div>
+            )}
 
             <div className="policy-summary" role="status" style={{ marginTop: 16 }}>
               <IconCheck />
