@@ -93,7 +93,6 @@ export function PairPage() {
                 style={{ fontSize: 28, letterSpacing: "0.18em", textAlign: "center", minHeight: 64 }}
                 placeholder="XXXX-XXXX"
                 autoComplete="off"
-                autoFocus
                 value={code}
                 onChange={e => setCode(formatCode(e.target.value))}
                 aria-invalid={error ? "true" : undefined}

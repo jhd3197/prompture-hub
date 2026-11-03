@@ -76,7 +76,7 @@ export function TopBar({ user }: { user: CurrentUser }) {
           <Needle tabs={tabs} />
         </nav>
         <div className="bar-end">
-          <button type="button" className="cmd-trigger" onClick={openPalette} aria-label="Open command palette" aria-keyshortcuts="Control+K Meta+K /">
+          <button type="button" className="cmd-trigger" onClick={openPalette} aria-label="Search or jump to, opens the command palette" aria-keyshortcuts="Control+K Meta+K /">
             <IconSearch />
             <span className="cmd-label">Search or jump to</span>
             <span className="kbd-group" aria-hidden="true"><span className="kbd">{mac ? "⌘" : "Ctrl"}</span><span className="kbd">K</span></span>

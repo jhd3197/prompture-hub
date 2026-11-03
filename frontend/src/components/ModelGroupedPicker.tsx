@@ -158,20 +158,11 @@ export function ModelGroupedPicker({ value, onChange }: Props) {
 
             return (
               <div key={g.provider} style={{ marginBottom: 6 }}>
-                <div
-                  className={`provider-bar ${isOpen ? "open" : ""}`}
-                  style={{ cursor: "pointer", padding: "8px 12px" }}
-                  onClick={() => toggleProvider(g.provider)}
-                  role="button"
-                  tabIndex={0}
-                  aria-expanded={isOpen}
-                  onKeyDown={e => {
-                    if (e.key === "Enter" || e.key === " ") {
-                      e.preventDefault();
-                      toggleProvider(g.provider);
-                    }
-                  }}
-                >
+                <div className={`provider-bar ${isOpen ? "open" : ""}`} style={{ padding: "4px 12px" }}>
+                  <button
+                    type="button" className="provider-toggle" aria-expanded={isOpen}
+                    onClick={() => toggleProvider(g.provider)}
+                  >
                   <span className="provider-chevron">
                     <IconChevronRight style={{ width: 14, height: 14 }} />
                   </span>
@@ -203,11 +194,8 @@ export function ModelGroupedPicker({ value, onChange }: Props) {
                       )}
                     </div>
                   </div>
-                  <label
-                    className="row"
-                    style={{ gap: 6, fontSize: 12 }}
-                    onClick={e => e.stopPropagation()}
-                  >
+                  </button>
+                  <label className="row" style={{ gap: 6, fontSize: 12 }}>
                     <input
                       type="checkbox"
                       checked={allOn}

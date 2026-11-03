@@ -141,7 +141,7 @@ export function CreateKeyPage() {
               <label htmlFor="k-name">Key name</label>
               <input
                 id="k-name" className="input mono" placeholder="production-web"
-                value={name} onChange={e => setName(e.target.value)} autoFocus
+                value={name} onChange={e => setName(e.target.value)}
               />
               <span className={`hint ${name && !nameOk ? "field-error" : ""}`}>
                 Letters, numbers, hyphens, or underscores. Example: <code className="mono">production-web</code>.

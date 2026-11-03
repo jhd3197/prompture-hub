@@ -13,7 +13,7 @@ export function CopyId({ value, display, label = "id" }: { value: string; displa
     setTimeout(() => setDone(false), 1400);
   };
   return (
-    <button type="button" className="id-copy" onClick={copy} title={`Copy ${label}: ${value}`} aria-label={`Copy ${label} ${value}`}>
+    <button type="button" className="id-copy" onClick={copy} title={`Copy ${label}: ${value}`} aria-label={`${display ?? value}, copy ${label}`}>
       <span className="id-text">{display ?? value}</span>
       {done ? <IconCheck /> : <IconCopy />}
     </button>

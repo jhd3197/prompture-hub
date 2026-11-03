@@ -23,6 +23,7 @@ export function LoginPage({ error }: { error?: string }) {
 
   return (
     <div className="login-wrap">
+      <a href="#main" className="skip-link">Skip to sign in</a>
       <aside className="login-aside" data-theme="dark" aria-label="About the hub">
         <Brand as="static" />
         <div className="login-lede">

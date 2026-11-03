@@ -1,0 +1,19 @@
+/* Targets, hover answers and picker structure found in the audit passes. Loaded last. */
+.provider-toggle {
+  flex: 1; min-width: 0; display: flex; align-items: center; gap: 14px; min-height: 44px; padding: 0; border: 0; background: transparent;
+  text-align: left; color: inherit; font: inherit; cursor: pointer;
+}
+.model-row { transition: background var(--dur-1) var(--glide), transform var(--dur-1) var(--settle); }
+.model-row:hover { transform: translateX(2px); }
+.provider-bar { transition: border-color var(--dur-1) var(--glide), background var(--dur-1) var(--glide), transform var(--dur-1) var(--settle); }
+.provider-bar:hover { transform: translateY(-1px); }
+
+/* every selected or unselected segment answers the pointer */
+.seg button:hover { transform: translateY(-1px); }
+
+/* touch and pointer targets of at least 24 px */
+.id-copy { min-height: 24px; }
+.chip[role], button.chip { min-height: 24px; }
+.readout-meta a, .crumbs a, .bars .b-name a, .tbl-foot a { display: inline-flex; align-items: center; min-height: 24px; }
+.crumbs a { padding: 0 2px; }
+.page-sub a, .muted a { display: inline-block; padding: 2px 0; }
