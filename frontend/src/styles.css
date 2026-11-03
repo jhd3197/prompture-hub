@@ -670,6 +670,8 @@ table.tbl td.strong { color: var(--text); font-weight: 600; }
   background: radial-gradient(ellipse at 20% 30%, var(--rail) 25%, transparent 75%);
 }
 .login-aside > * { flex: none; position: relative; }
+.login-aside .trust { color: var(--text); }
+.login-aside .faint { color: var(--rail-text-2); }
 .login-aside .brand-name { color: var(--rail-text); }
 .login-aside .brand-name span { color: var(--rail-text-3); }
 .login-aside h1, .login-aside h2 { color: var(--rail-text) !important; }

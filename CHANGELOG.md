@@ -6,6 +6,9 @@ and this project adheres to [Semantic Versioning](https://semver.org/).
 
 ## [Unreleased]
 
+### Changed
+- Dashboard: visual refresh. New design tokens (type scale, spacing, radii, elevation, light and dark palettes), a dark ink sidebar rail that spans the full page height, ledger-style stat strips, monospace table headers and captions, a compact top bar and scrolling settings tabs on phones, and a reduced-motion fallback. Fonts (Schibsted Grotesk, Geist Mono) are now bundled with the app instead of loaded from Google Fonts. No behaviour or API changes.
+
 ### Added
 - Billing reconciliation: `GET /admin/billing/reconciliation?period=day|week|month&refresh=false` compares hub-recorded spend with OpenAI/Anthropic organization cost reports (`OPENAI_ADMIN_KEY` / `ANTHROPIC_ADMIN_KEY`) and OpenRouter usage, reports DeepSeek/Moonshot balances, and flags mismatches. Provider failures only affect their own row.
 - Dashboard: a Billing page (`/billing`, backed by `GET /api/billing/reconciliation`) with period selector, refresh, status badges and per-provider caveats.
