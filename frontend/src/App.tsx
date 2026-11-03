@@ -11,7 +11,7 @@ import { SkelReadouts, SkelRows } from "./components/Skeleton";
 import { ToastProvider } from "./components/Toast";
 import { PageHead } from "./components/PageHead";
 import { IconHome, IconSearch } from "./icons";
-import { errText } from "./lib/format";
+import { errText } from "./util/format";
 import { AnalyticsPage } from "./pages/AnalyticsPage";
 import { BillingPage } from "./pages/BillingPage";
 import { ConversationsPage } from "./pages/ConversationsPage";

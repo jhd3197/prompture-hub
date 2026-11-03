@@ -1,7 +1,7 @@
 import { useEffect, useId, useRef, type ReactNode } from "react";
 import { createPortal } from "react-dom";
 import { IconX } from "../icons";
-import { useFocusTrap } from "../lib/hooks";
+import { useFocusTrap } from "../util/hooks";
 
 interface Props {
   title: string;

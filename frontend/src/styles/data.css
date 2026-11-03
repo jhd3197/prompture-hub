@@ -32,9 +32,9 @@
 }
 
 /* ---------- num: count-up with a ghost that holds the final width ---------- */
-.num { display: inline-grid; justify-items: start; }
-.num > * { grid-area: 1 / 1; }
-.num-ghost { visibility: hidden; }
+.countup { display: inline-grid; justify-items: start; }
+.countup > * { grid-area: 1 / 1; }
+.countup-ghost { visibility: hidden; }
 
 /* ---------- sparkline ---------- */
 .spark { display: block; width: 100%; height: 36px; overflow: visible; }

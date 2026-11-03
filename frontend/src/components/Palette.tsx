@@ -7,8 +7,8 @@ import {
   IconActivity, IconBolt, IconCog, IconCopy, IconDevice, IconDocs, IconDollar, IconExternal, IconGrid, IconHome,
   IconKey, IconKeyboard, IconLogout, IconMessages, IconMoon, IconPlus, IconSearch, IconSliders, IconSun, IconX,
 } from "../icons";
-import { ensureCatalog, useCatalog } from "../lib/catalog";
-import { useFocusTrap } from "../lib/hooks";
+import { ensureCatalog, useCatalog } from "../util/catalog";
+import { useFocusTrap } from "../util/hooks";
 import { useDensity, useTheme } from "../theme";
 import { useToast } from "./Toast";
 

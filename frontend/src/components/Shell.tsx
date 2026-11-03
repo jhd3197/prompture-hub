@@ -5,7 +5,7 @@ import {
   IconActivity, IconCog, IconDevice, IconDollar, IconGrid, IconHome, IconKey, IconKeyboard, IconLogout, IconMessages,
   IconMore, IconMoon, IconSearch, IconSun, IconX,
 } from "../icons";
-import { useFocusTrap } from "../lib/hooks";
+import { useFocusTrap } from "../util/hooks";
 import { useTheme } from "../theme";
 import type { CurrentUser } from "../types";
 import { Brand } from "./Brand";

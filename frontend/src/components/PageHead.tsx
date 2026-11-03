@@ -1,5 +1,5 @@
 import type { ReactNode } from "react";
-import { usePageTitle } from "../lib/hooks";
+import { usePageTitle } from "../util/hooks";
 
 /** The page's single h1, the sentence under it, and its actions. Also sets the tab title. */
 export function PageHead({
