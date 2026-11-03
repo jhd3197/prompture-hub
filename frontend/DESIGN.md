@@ -140,6 +140,12 @@ Sentence case, no em or en dashes, no filler verbs, no fake metrics, no decorati
 
 ## Decisions and known limits
 
+- Idle: the page is still at rest by decision. Only the live dot in the bar breathes and the brand needle twitches every seven seconds;
+  data surfaces do not loop. Hover, press and focus answer in the settle verb everywhere (lift, press, tick draw).
+- Removed in the last pass: the gradient wash behind the hero readout. The rule, needle and notches carry the identity.
+- Fonts stay Schibsted Grotesk and Geist Mono from the first pass (self-hosted, preloaded, metric-matched fallbacks).
+- Pair and Create key no longer autofocus a field, so the skip link stays the first tab stop.
+
 - No per-device usage exists in the API, so Devices shows last-seen position on a 30 day scale and nothing invented.
 - Per-key spend inside the cap window is derived from `/api/analytics` (day window = today in UTC, week = since Monday UTC, month = since the 1st UTC).
   It excludes manual spend adjustments, and the UI says so.
