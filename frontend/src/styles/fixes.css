@@ -13,7 +13,11 @@
 
 /* touch and pointer targets of at least 24 px */
 .id-copy { min-height: 24px; }
-.chip[role], button.chip { min-height: 24px; }
+button.chip { min-height: 24px; }
 .readout-meta a, .crumbs a, .bars .b-name a, .tbl-foot a { display: inline-flex; align-items: center; min-height: 24px; }
 .crumbs a { padding: 0 2px; }
 .page-sub a, .muted a { display: inline-block; padding: 2px 0; }
+
+/* inline bars inside table cells use the same fill as ranked bars */
+.b-track .b-fill { position: absolute; inset: 0; background: var(--accent); transform-origin: 0 50%; transform: scaleX(var(--p, 0)); animation: fill-x 800ms var(--settle) both; border-radius: 2px; }
+.b-track .b-fill.alt { background: var(--ink-2); }

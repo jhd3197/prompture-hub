@@ -16,7 +16,6 @@
 .readout-meta a { color: var(--accent-ink); font-weight: 620; }
 .readout-meta a:hover { text-decoration: underline; }
 .readout .spark { margin-top: 6px; }
-.readout.is-hero { background: linear-gradient(180deg, transparent 60%, var(--accent-wash)); }
 .readout-warn .readout-value { color: var(--amber-ink); }
 .readout-bad .readout-value { color: var(--red-ink); }
 @media (max-width: 1000px) {

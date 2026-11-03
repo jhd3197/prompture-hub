@@ -21,7 +21,7 @@ export function Sparkline({
       <line className="spark-base" x1="0" x2={W} y1={H - 0.5} y2={H - 0.5} />
       <g className="spark-draw">
         {area && <path className="spark-area" d={area} />}
-        <path className="spark-line" d={line || `M0,${H - 2} L${W},${H - 2}`} />
+        {max > 0 && <path className="spark-line" d={line} />}
       </g>
     </svg>
   );

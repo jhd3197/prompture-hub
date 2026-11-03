@@ -7,7 +7,10 @@ and this project adheres to [Semantic Versioning](https://semver.org/).
 ## [Unreleased]
 
 ### Changed
-- Dashboard: visual refresh. New design tokens (type scale, spacing, radii, elevation, light and dark palettes), a dark ink sidebar rail that spans the full page height, ledger-style stat strips, monospace table headers and captions, a compact top bar and scrolling settings tabs on phones, and a reduced-motion fallback. Fonts (Schibsted Grotesk, Geist Mono) are now bundled with the app instead of loaded from Google Fonts. No behaviour or API changes.
+- Dashboard: redesigned around a ticked scale. A top bar replaces the sidebar (with a needle that settles under the current page and a bottom tab bar on phones), pages open with a drawn rule, and figures are mono readouts with sparklines. New light and dark palettes keep the selectable accent hue. Fonts (Schibsted Grotesk, Geist Mono) are bundled with the app instead of loaded from Google Fonts. No API changes.
+- Dashboard: hand-built SVG charts and meters. Spend and request traces with a hover and keyboard crosshair and a table view, latency by day and by model, cap meters per key with alarm notches at 70% and 90% and a projected pace, ranked spend bars, provider share, and hub against provider bars on Billing. Per-key spend inside the cap window is derived from `/api/analytics` and excludes manual adjustments.
+- Dashboard: command palette on Ctrl or Cmd K and `/` with fuzzy search over pages, actions, keys and sessions; `g` then a letter navigates, `c` creates a key, `?` lists shortcuts.
+- Dashboard: sortable tables with sticky headers, row menus, click-to-copy ids, a density setting, skeleton loading, error states with retry, designed empty states, reduced-motion support, and a static app shell with meta, Open Graph tags and a favicon in `index.html`.
 
 ### Added
 - Billing reconciliation: `GET /admin/billing/reconciliation?period=day|week|month&refresh=false` compares hub-recorded spend with OpenAI/Anthropic organization cost reports (`OPENAI_ADMIN_KEY` / `ANTHROPIC_ADMIN_KEY`) and OpenRouter usage, reports DeepSeek/Moonshot balances, and flags mismatches. Provider failures only affect their own row.
