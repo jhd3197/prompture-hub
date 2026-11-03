@@ -66,3 +66,21 @@ export function IconGitHub(props: Props) {
     </svg>
   );
 }
+
+export const IconMore = I(<><circle cx="5" cy="12" r="1.2" fill="currentColor"/><circle cx="12" cy="12" r="1.2" fill="currentColor"/><circle cx="19" cy="12" r="1.2" fill="currentColor"/></>);
+export const IconSort = I(<><path d="m7 10 5 5 5-5"/></>, 2);
+export const IconPause = I(<><path d="M9 5v14"/><path d="M15 5v14"/></>, 2.2);
+export const IconPlay = I(<><path d="m8 5 11 7-11 7z"/></>);
+export const IconKeyboard = I(<><rect x="2.5" y="6" width="19" height="12" rx="2"/><path d="M6 10h.01M10 10h.01M14 10h.01M18 10h.01M7 14h10"/></>);
+export const IconSliders = I(<><path d="M4 7h10M18 7h2M4 17h2M10 17h10"/><circle cx="16" cy="7" r="2"/><circle cx="8" cy="17" r="2"/></>);
+export const IconLogout = I(<><path d="M9 4H5v16h4"/><path d="m16 8 4 4-4 4"/><path d="M20 12H9"/></>);
+export const IconPencil = I(<><path d="M4 20h4L19 9l-4-4L4 16z"/></>);
+export const IconDevice = I(<><rect x="6" y="2.5" width="12" height="19" rx="2.5"/><path d="M11 18.5h2"/></>);
+export const IconMeter = I(<><path d="M3.5 17a8.5 8.5 0 0 1 17 0"/><path d="m12 17 3.5-6"/><path d="M6 17h.01M18 17h.01"/></>);
+export const IconMark = (props: Props) => (
+  <svg viewBox="0 0 24 24" fill="none" aria-hidden="true" {...props}>
+    <path d="M3 20a9 9 0 0 1 18 0" stroke="currentColor" strokeWidth="2" strokeLinecap="round"/>
+    <path d="M6.2 12.2 7.4 13M12 7.8v1.6M17.8 12.2 16.6 13" stroke="currentColor" strokeWidth="1.6" strokeLinecap="round"/>
+    <path className="bm-needle" d="M10.9 20 14.8 9.4 13.1 20z" fill="currentColor"/>
+  </svg>
+);

@@ -1,0 +1,8 @@
+/* Page compositions and one-off surfaces. Shared pieces live in shell, controls and data. */
+
+.chord-hint {
+  position: fixed; left: 50%; bottom: 24px; z-index: 150; transform: translateX(-50%); display: flex; gap: 12px; flex-wrap: wrap; justify-content: center;
+  max-width: calc(100vw - 24px); padding: 10px 14px; border-radius: var(--r-lg); background: var(--ink); color: var(--ground);
+  font-size: var(--t-xs); box-shadow: var(--shadow-float); animation: settle-in 200ms var(--glide) both;
+}
+.chord-hint .kbd { background: transparent; color: var(--ground); border-color: currentColor; margin-right: 4px; }
