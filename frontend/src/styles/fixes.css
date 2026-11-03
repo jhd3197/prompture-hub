@@ -8,8 +8,6 @@
 .provider-bar { transition: border-color var(--dur-1) var(--glide), background var(--dur-1) var(--glide), transform var(--dur-1) var(--settle); }
 .provider-bar:hover { transform: translateY(-1px); }
 
-/* every selected or unselected segment answers the pointer */
-.seg button:hover { transform: translateY(-1px); }
 
 /* touch and pointer targets of at least 24 px */
 .id-copy { min-height: 24px; }

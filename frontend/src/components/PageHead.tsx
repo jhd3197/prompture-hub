@@ -18,6 +18,7 @@ export function PageHead({
         {sub && <p className="page-sub">{sub}</p>}
       </div>
       {children && <div className="page-head-actions">{children}</div>}
+      <i className="head-scale" aria-hidden="true" />
     </div>
   );
 }

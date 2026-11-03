@@ -13,6 +13,7 @@ import "./styles/sessions.css";
 import "./styles/login.css";
 import "./styles/settings.css";
 import "./styles/fixes.css";
+import "./styles/round2.css";
 
 createRoot(document.getElementById("root")!).render(
   <StrictMode>

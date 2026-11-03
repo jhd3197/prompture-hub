@@ -12,6 +12,7 @@ import { ToastProvider } from "./components/Toast";
 import { PageHead } from "./components/PageHead";
 import { IconHome, IconSearch } from "./icons";
 import { errText } from "./util/format";
+import { startSegThumbs } from "./util/segThumb";
 import { AnalyticsPage } from "./pages/AnalyticsPage";
 import { BillingPage } from "./pages/BillingPage";
 import { ConversationsPage } from "./pages/ConversationsPage";
@@ -70,6 +71,7 @@ function AuthedShell({ user }: { user: CurrentUser }) {
   const main = useRef<HTMLElement>(null);
   const first = useRef(true);
   const [announce, setAnnounce] = useState("");
+  useEffect(() => startSegThumbs(), []);
 
   // Route changes: back to the top, focus the content region, tell screen readers where they are.
   useEffect(() => {
@@ -79,6 +81,13 @@ function AuthedShell({ user }: { user: CurrentUser }) {
     setAnnounce(document.title);
   }, [loc.pathname]);
 
+  const [replay, setReplay] = useState(0);
+  const prev = useRef(loc);
+  useEffect(() => {
+    if (prev.current.key !== loc.key && prev.current.pathname === loc.pathname && prev.current.search === loc.search) setReplay(r => r + 1);
+    prev.current = loc;
+  }, [loc]);
+
   const routeKey = loc.pathname.startsWith("/settings") ? "/settings" : loc.pathname;
 
   return (
@@ -87,7 +96,8 @@ function AuthedShell({ user }: { user: CurrentUser }) {
       <div className="app">
         <TopBar user={user} />
         <main className="main" id="main" tabIndex={-1} ref={main}>
-          <div className="route" key={routeKey}>
+          <div className="route" key={routeKey} data-r={replay % 2}>
+            <i className="route-pass" aria-hidden="true" />
             <Routes location={loc}>
               <Route path="/" element={<Dashboard user={user} />} />
               <Route path="/analytics" element={<AnalyticsPage />} />
@@ -120,7 +130,7 @@ function AuthedShell({ user }: { user: CurrentUser }) {
 function Splash({ children }: { children?: React.ReactNode }) {
   return (
     <div className="app">
-      <header className="bar"><div className="bar-in"><Brand as="static" /></div></header>
+      <header className="bar"><i className="bar-scale" aria-hidden="true" /><div className="bar-in"><Brand as="static" /></div></header>
       <main className="main" id="main">
         <div className="container">{children}</div>
       </main>

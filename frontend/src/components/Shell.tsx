@@ -65,12 +65,13 @@ export function TopBar({ user }: { user: CurrentUser }) {
 
   return (
     <header className="bar">
+      <i className="bar-scale" aria-hidden="true" />
       <div className="bar-in">
         <Brand />
         <nav className="tabs" aria-label="Primary" ref={tabs}>
           {TABS.map(t => (
             <NavLink key={t.to} to={t.to} end={t.to === "/"} className={({ isActive }) => `tab${isActive ? " active" : ""}`}>
-              <span>{t.label}</span>
+              <span>{t.label}</span><i className="tab-ghost" aria-hidden="true" />
             </NavLink>
           ))}
           <Needle tabs={tabs} />

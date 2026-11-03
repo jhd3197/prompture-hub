@@ -3,14 +3,13 @@
 .app { min-height: 100vh; display: flex; flex-direction: column; }
 .main { flex: 1; padding: calc(36px * var(--density)) 0 96px; outline: none; }
 .container { width: 100%; max-width: 1320px; margin: 0 auto; padding: 0 clamp(16px, 3vw, 40px); }
-.route { animation: route-in var(--dur-2) var(--glide) both; }
 
 /* ---------- top bar ---------- */
 .bar {
   position: sticky; top: 0; z-index: 60; height: var(--bar-h);
   background: var(--panel); border-bottom: 1px solid var(--line);
 }
-.bar::after { /* the scale: minor ticks every 8px, major every 40px */
+.bar-scale { display: block; /* the scale: minor ticks every 8px, major every 40px */
   content: ""; position: absolute; left: 0; right: 0; bottom: 0; height: 7px; pointer-events: none;
   background:
     repeating-linear-gradient(90deg, var(--tick) 0 1px, transparent 1px 40px) 0 100% / 100% 7px no-repeat,
@@ -131,7 +130,7 @@
 .page-head-actions { display: flex; align-items: center; gap: 10px; flex-wrap: wrap; }
 .page-title { font-size: var(--t-title); font-weight: 800; letter-spacing: -0.045em; line-height: 1.05; color: var(--ink); }
 .page-sub { color: var(--ink-2); margin: 10px 0 0; font-size: var(--t-md); max-width: 64ch; line-height: 1.55; }
-.page-head::after { /* the rule, drawn once on arrival */
+.head-scale { display: block; /* the rule, drawn once on arrival */
   content: ""; position: absolute; left: 0; right: 0; bottom: 0; height: 9px;
   background:
     repeating-linear-gradient(90deg, var(--ink-3) 0 1px, transparent 1px 80px) 0 100% / 100% 9px no-repeat,
