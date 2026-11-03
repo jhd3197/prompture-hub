@@ -1,6 +1,7 @@
 import { useEffect, useState } from "react";
 import { Link, useSearchParams } from "react-router-dom";
 import { ApiError, api } from "../api";
+import { PageHead } from "../components/PageHead";
 import { useToast } from "../components/Toast";
 import { IconAlert, IconCheck, IconLock, IconShield } from "../icons";
 import type { PairingInfo } from "../types";
@@ -37,7 +38,7 @@ export function PairPage() {
     } catch (e) {
       setError(
         e instanceof ApiError && e.status === 404
-          ? "No pending pairing with that code. Codes expire after 10 minutes — start again on the device."
+          ? "No pending pairing with that code. Codes expire after 10 minutes, so start again on the device."
           : String(e),
       );
       setStep({ kind: "enter" });
@@ -73,17 +74,12 @@ export function PairPage() {
 
   return (
     <div className="container" style={{ maxWidth: 560 }}>
-      <div className="page-head">
-        <div className="grow">
-          <h1 className="page-title">Pair a device</h1>
-          <p className="page-sub">
-            A desktop companion or widget is asking to watch this hub. Enter the code it shows,
-            check what it wants, and approve it.
-          </p>
-        </div>
-      </div>
+      <PageHead
+        title="Pair a device"
+        sub="A desktop companion or widget is asking to watch this hub. Enter the code it shows, check what it wants, and approve it."
+      />
 
-      <div className="card card-pad">
+      <div className="panel panel-pad rise">
         {(step.kind === "enter" || step.kind === "loading") && (
           <form
             onSubmit={e => { e.preventDefault(); if (code.length === 9) lookup(code); }}
@@ -93,8 +89,8 @@ export function PairPage() {
               <label htmlFor="pair-code">Code shown on the device</label>
               <input
                 id="pair-code"
-                className="input mono"
-                style={{ fontSize: 22, letterSpacing: "0.12em", textAlign: "center" }}
+                className="input mono tnum"
+                style={{ fontSize: 28, letterSpacing: "0.18em", textAlign: "center", minHeight: 64 }}
                 placeholder="XXXX-XXXX"
                 autoComplete="off"
                 autoFocus
