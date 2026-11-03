@@ -49,7 +49,7 @@
 .seg { display: inline-flex; background: var(--sunk); border: 1px solid var(--line); border-radius: var(--r); padding: 2px; gap: 2px; position: relative; }
 .seg button {
   border: 0; background: transparent; color: var(--ink-2); min-height: 28px; padding: 0 12px; border-radius: 4px;
-  font-size: var(--t-xs); font-weight: 620; text-transform: capitalize; display: inline-flex; align-items: center; gap: 6px;
+  font-size: var(--t-xs); font-weight: 620; display: inline-flex; align-items: center; gap: 6px;
   transition: background var(--dur-1) var(--glide), color var(--dur-1) var(--glide), transform var(--dur-1) var(--settle);
 }
 .seg button:hover { color: var(--ink); }

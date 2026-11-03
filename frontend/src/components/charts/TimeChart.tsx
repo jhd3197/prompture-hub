@@ -34,7 +34,7 @@ function useWidth<T extends HTMLElement>() {
  * tooltip and a polite live region; "Table" swaps in the same numbers as a real table.
  */
 export function TimeChart({
-  title, labels, tickLabels, series, kind, format, valueNames,
+  title, labels, tickLabels, series, kind, format, valueNames, tickFormat,
 }: {
   title: string;
   labels: string[];
@@ -43,6 +43,7 @@ export function TimeChart({
   kind: "lines" | "bars";
   format: (v: number, seriesIndex: number) => string;
   valueNames?: string[];
+  tickFormat?: (v: number) => string;
 }) {
   const [wrap, width] = useWidth<HTMLDivElement>();
   const [view, setView] = useState<"chart" | "table">("chart");
@@ -51,15 +52,16 @@ export function TimeChart({
   const n = labels.length;
   const W = Math.max(width, 280);
   const H = W < 520 ? 190 : 230;
-  const m = { l: W < 520 ? 40 : 48, r: 12, t: 12, b: 26 };
-  const pw = W - m.l - m.r;
-  const ph = H - m.t - m.b;
   const peak = Math.max(...series.flatMap(s => s.values), 0);
   const { max, step } = niceMax(peak);
+  const tf = tickFormat ?? ((v: number) => format(v, 0));
+  const ticks = Array.from({ length: Math.round(max / step) + 1 }, (_, i) => i * step);
+  const m = { l: Math.max(...ticks.map(t => tf(t).length)) * 6.6 + 16, r: 12, t: 12, b: 26 };
+  const pw = W - m.l - m.r;
+  const ph = H - m.t - m.b;
   const band = pw / Math.max(n, 1);
   const x = (i: number) => (kind === "bars" ? m.l + band * (i + 0.5) : m.l + (n <= 1 ? pw / 2 : (i / (n - 1)) * pw));
   const y = (v: number) => m.t + ph - (v / max) * ph;
-  const ticks = Array.from({ length: Math.round(max / step) + 1 }, (_, i) => i * step);
   const every = Math.max(1, Math.ceil(n / Math.max(2, Math.floor(pw / 74))));
   const names = valueNames ?? series.map(s => s.name);
 
@@ -120,7 +122,7 @@ export function TimeChart({
               {ticks.map(t => (
                 <g key={t}>
                   <line className={t === 0 ? "ch-axis" : "ch-grid"} x1={m.l} x2={W - m.r} y1={y(t)} y2={y(t)} />
-                  <text className="ch-label" x={m.l - 8} y={y(t) + 3.5} textAnchor="end">{format(t, 0).replace(/\.0+$/, "")}</text>
+                  <text className="ch-label" x={m.l - 8} y={y(t) + 3.5} textAnchor="end">{tf(t)}</text>
                 </g>
               ))}
               {labels.map((_, i) => i % every === 0 && (
