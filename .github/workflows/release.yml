@@ -2,13 +2,15 @@ name: Release to PyPI
 
 # Prompture-style flow: develop on `dev`, PR into `main`. Every push to `main`
 # auto-bumps the patch version, syncs it into the repo, builds the SPA + wheel
-# (so the published package needs no Node), publishes to PyPI via Trusted
-# Publishing (OIDC — no stored token), and cuts a GitHub Release.
+# (so the published package needs no Node), publishes to PyPI using the
+# PYPI_API_TOKEN repository secret, and cuts a GitHub Release.
 #
-# One-time PyPI setup (PyPI-side, not in this repo): add a Trusted Publisher for
-# project "prompture-hub" with owner jhd3197, repository prompture-hub,
-# workflow filename release.yml, environment name pypi. Without it the publish
-# step fails with `invalid-publisher`.
+# One-time setup: add a PyPI API token as the PYPI_API_TOKEN repository secret
+# (Settings > Secrets and variables > Actions). Optional alternative: Trusted
+# Publishing (OIDC) — remove the `password:` line from the publish step and add
+# a Trusted Publisher on PyPI for project "prompture-hub" with owner jhd3197,
+# repository prompture-hub, workflow filename release.yml, environment name
+# pypi. Without it the OIDC publish fails with `invalid-publisher`.
 
 on:
   push:
@@ -52,7 +54,7 @@ jobs:
     runs-on: ubuntu-latest
     permissions:
       contents: write   # push the version-bump commit + create the release
-      id-token: write   # OIDC for Trusted Publishing
+      id-token: write   # OIDC (only needed for Trusted Publishing; harmless with token)
     environment:
       name: pypi
       url: https://pypi.org/p/prompture-hub
@@ -106,8 +108,10 @@ jobs:
           print("wheel OK: SPA + migrations bundled")
           PY
 
-      - name: Publish to PyPI (Trusted Publishing / OIDC)
+      - name: Publish to PyPI (API token)
         uses: pypa/gh-action-pypi-publish@release/v1
+        with:
+          password: ${{ secrets.PYPI_API_TOKEN }}
 
       # After a successful publish, persist the bumped version back to main so
       # the repo always shows the latest released version. [skip ci] keeps this
