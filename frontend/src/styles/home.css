@@ -1,0 +1,25 @@
+/* Home: trust flow and activity extras. */
+.trust { background: var(--panel); border: 1px solid var(--line); border-radius: var(--r); overflow: clip; }
+.trust-flow { display: grid; grid-template-columns: 1fr 28px 1.3fr 28px 1fr; align-items: stretch; }
+.trust.stacked .trust-flow { grid-template-columns: 1fr; }
+.tnode { padding: 16px 18px; display: flex; flex-direction: column; gap: 6px; min-width: 0; }
+.tlabel { font-family: var(--font-mono); font-size: var(--t-cap); text-transform: uppercase; letter-spacing: 0.06em; color: var(--ink-3); }
+.ttitle { font-weight: 700; font-size: var(--t-md); letter-spacing: -0.01em; display: flex; align-items: center; gap: 8px; }
+.ttitle svg { width: 16px; height: 16px; color: var(--accent-ink); }
+.tdesc { font-size: var(--t-xs); color: var(--ink-2); line-height: 1.5; }
+.chip-row { display: flex; flex-wrap: wrap; gap: 6px; margin-top: 2px; }
+.tnode-gate { background: var(--accent-wash); }
+.tnode-gate .ttitle { color: var(--accent-ink); }
+.tnode-vault { background: var(--sunk); }
+.tnode-vault .ttitle svg { color: var(--ink-2); }
+.enforce-list { display: flex; flex-direction: column; gap: 5px; }
+.ei { display: flex; align-items: center; gap: 8px; font-size: var(--t-xs); font-weight: 560; }
+.ei svg { width: 13px; height: 13px; color: var(--accent-ink); flex: none; }
+.tarrow { display: grid; place-items: center; }
+.tarrow span { width: 1px; height: 100%; background: var(--line-2); position: relative; }
+.tarrow span::after { content: ""; position: absolute; bottom: 0; left: -3px; width: 7px; height: 7px; border: solid var(--line-2); border-width: 0 1px 1px 0; transform: rotate(45deg); }
+.trust.stacked .tarrow { height: 14px; }
+@media (max-width: 880px) {
+  .trust-flow { grid-template-columns: 1fr; }
+  .tarrow { height: 14px; }
+}
