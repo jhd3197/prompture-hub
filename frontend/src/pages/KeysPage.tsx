@@ -262,14 +262,14 @@ export function KeysPage() {
             <div className="toolbar" style={{ padding: "10px 16px", borderBottom: "1px solid var(--line)" }}>
               <div className="search">
                 <IconSearch />
-                <input value={q} onChange={e => setQ(e.target.value)} placeholder="Filter by name, project or id" aria-label="Filter keys" />
+                <input value={q} onChange={e => setQ(e.target.value)} placeholder="Filter keys" aria-label="Filter keys" />
               </div>
               <div className="seg" role="radiogroup" aria-label="Show">
                 {(["all", "active", "inactive"] as const).map(f => (
                   <button key={f} type="button" role="radio" aria-checked={filter === f} className={filter === f ? "on" : ""} onClick={() => setFilter(f)}>{f}</button>
                 ))}
               </div>
-              <div className="seg" role="radiogroup" aria-label="Row density">
+              <div className="seg seg-density" role="radiogroup" aria-label="Row density">
                 {(["comfortable", "compact"] as const).map(d => (
                   <button key={d} type="button" role="radio" aria-checked={density === d} className={density === d ? "on" : ""} onClick={() => setDensity(d)}>{d}</button>
                 ))}
@@ -281,7 +281,7 @@ export function KeysPage() {
               </EmptyState>
             ) : (
               <div className="table-wrap">
-                <table className="tbl cards">
+                <table className="tbl cards keys">
                   <caption className="sr-only">Hub keys with spend against cap</caption>
                   <thead>
                     <tr>
@@ -315,7 +315,7 @@ export function KeysPage() {
                                 </span>
                               </span>
                             </td>
-                            <td data-label="Spend against cap" className="td-wide" style={{ minWidth: 220 }}>
+                            <td data-label="Spend against cap" className="td-wide td-bare" style={{ minWidth: 220 }}>
                               {!live || !k.active ? (
                                 <span className="faint">{live ? "expired" : `revoked ${k.revoked_at ? dateOnly(k.revoked_at) : ""}`}</span>
                               ) : u == null ? (
@@ -327,7 +327,7 @@ export function KeysPage() {
                                 </div>
                               )}
                             </td>
-                            <td data-label="Models">
+                            <td data-label="Models" className="td-m-hide">
                               {k.allowed_models.length === 0 ? <span className="faint">any model</span> : (
                                 <button type="button" className="chip" style={{ cursor: "pointer" }} aria-expanded={open} onClick={() => setExpanded(open ? null : k.id)}>
                                   {plural(k.allowed_models.length, "model")}
@@ -335,9 +335,9 @@ export function KeysPage() {
                                 </button>
                               )}
                             </td>
-                            <td data-label="Rate" className="num cell-id nowrap">{k.rate_limit_per_min}/min</td>
-                            <td data-label="Created" className="cell-id nowrap faint">{dateOnly(k.created_at)}{k.expires_at && <span className="cell-sub">{k.expired ? "expired" : "expires"} {dateOnly(k.expires_at)}</span>}</td>
-                            <td data-label="State"><KeyStatus active={k.active} expired={k.expired} paused={k.paused} /></td>
+                            <td data-label="Rate" className="num cell-id nowrap td-m-hide">{k.rate_limit_per_min}/min</td>
+                            <td data-label="Created" className="cell-id nowrap faint td-m-hide">{dateOnly(k.created_at)}{k.expires_at && <span className="cell-sub">{k.expired ? "expired" : "expires"} {dateOnly(k.expires_at)}</span>}</td>
+                            <td data-label="State" className="td-state"><KeyStatus active={k.active} expired={k.expired} paused={k.paused} /></td>
                             <td className="cell-actions">
                               <Menu
                                 label={`Actions for ${k.name}`}

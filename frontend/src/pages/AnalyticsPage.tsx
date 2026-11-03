@@ -2,6 +2,7 @@ import { useState } from "react";
 import { api } from "../api";
 import { BarList } from "../components/charts/Bars";
 import { ShareBar } from "../components/charts/Bars";
+import { Gauge } from "../components/charts/Meter";
 import { Sparkline } from "../components/charts/Sparkline";
 import { TimeChart } from "../components/charts/TimeChart";
 import { EmptyState } from "../components/EmptyState";
@@ -158,18 +159,32 @@ export function AnalyticsPage() {
               <span className="caption readout-label"><IconAlert />Error rate</span>
               <div className="readout-value"><Num value={t.error_rate * 100} format={v => `${v.toFixed(1)}`} /><span className="unit">%</span></div>
               <div className="readout-meta">{plural(t.errors, "failed call")}</div>
+              <Gauge
+                value={t.error_rate} max={0.1} notches={[{ at: 0.05, hot: true }]} tone={t.error_rate >= 0.05 ? "bad" : "ok"}
+                label="Error rate against its 5% redline" valueText={`${(t.error_rate * 100).toFixed(1)}% of calls failed; redline at 5%`} ends={["0", "redline 5%"]}
+              />
               <Sparkline tone="bad" values={by.map(d => d.errors)} label={`Failed calls per day, last ${days} days`} />
             </div>
             <div className="readout">
               <span className="caption readout-label"><IconClock />Latency p95</span>
               <div className="readout-value">{t.p95_latency_ms == null ? <span className="faint">n/a</span> : <Num value={t.p95_latency_ms} format={v => ms(Math.round(v))} />}</div>
               <div className="readout-meta">p50 {ms(t.p50_latency_ms)}</div>
+              {t.p95_latency_ms != null && t.p50_latency_ms != null && (
+                <Gauge
+                  value={t.p95_latency_ms} max={Math.max(t.p95_latency_ms * 1.25, 1)} notches={[{ at: t.p50_latency_ms }]}
+                  label="p95 latency against the median" valueText={`p95 ${ms(t.p95_latency_ms)}, median ${ms(t.p50_latency_ms)}`} ends={["0", "notch = p50"]}
+                />
+              )}
               <Sparkline values={by.map(d => d.p95_latency_ms ?? 0)} label={`p95 latency per day, last ${days} days`} />
             </div>
             <div className="readout">
               <span className="caption readout-label"><IconRoute />Fallbacks</span>
               <div className="readout-value"><Num value={t.fallback_rate * 100} format={v => v.toFixed(1)} /><span className="unit">%</span></div>
               <div className="readout-meta">{plural(t.fallbacks, "call")} served by a backup</div>
+              <Gauge
+                value={t.fallback_rate} max={1} notches={[{ at: 0.5 }]}
+                label="Share of calls served by a backup" valueText={`${(t.fallback_rate * 100).toFixed(1)}% of calls`} ends={["0", "all calls"]}
+              />
               <Sparkline values={by.map(d => d.fallbacks)} label={`Fallback calls per day, last ${days} days`} />
             </div>
           </div>

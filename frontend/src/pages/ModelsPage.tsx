@@ -44,15 +44,43 @@ function RoutingExplain() {
   );
 }
 
+function CatalogReadouts({ data }: { data: ModelsResponse }) {
+  const local = data.groups.filter(g => g.is_local).length;
+  const g = data.groups[0];
+  const m = g?.models[0];
+  return (
+    <div className="cols cols-7-5 mb24">
+      <div className="readouts rise" style={{ ["--cols" as string]: "repeat(3, minmax(0, 1fr))" }}>
+        <div className="readout"><span className="caption readout-label"><IconGrid />Chat models</span><div className="readout-value">{data.total}</div><div className="readout-meta">discovered now</div></div>
+        <div className="readout"><span className="caption readout-label"><IconRoute />Providers</span><div className="readout-value">{data.groups.length}</div><div className="readout-meta">{local ? `${local} local` : "all hosted"}</div></div>
+        <div className="readout"><span className="caption readout-label"><IconLayers />Per provider</span><div className="readout-value">{data.groups.length ? Math.round(data.total / data.groups.length) : 0}</div><div className="readout-meta">models on average</div></div>
+      </div>
+      {g && m && (
+        <section className="panel rise route-ruler" style={{ ["--i" as string]: 1 }} aria-label="Anatomy of a route">
+          <div className="panel-head"><h2>Anatomy of a route</h2><span className="sub">first model found</span></div>
+          <div className="rr-body">
+            <div className="rr-route mono" aria-label={`${g.provider}/${m}`}>
+              <span className="rr-prov truncate">{g.provider}</span><span className="rr-slash">/</span><span className="rr-model truncate">{m}</span>
+            </div>
+            <div className="rr-scale" aria-hidden="true"><i /><i /></div>
+            <div className="rr-legend"><span>prefix picks the driver</span><span>the rest goes upstream</span></div>
+          </div>
+        </section>
+      )}
+    </div>
+  );
+}
+
 function ProviderRow({
-  group, query, forceOpen, onPick,
+  group, query, forceOpen, onPick, startOpen,
 }: {
   group: ProviderGroup;
   query: string;
   forceOpen: boolean;
+  startOpen?: boolean;
   onPick: (route: string) => void;
 }) {
-  const [open, setOpen] = useState(false);
+  const [open, setOpen] = useState(!!startOpen);
   const isOpen = forceOpen || open;
 
   const q = query.trim().toLowerCase();
@@ -92,7 +120,7 @@ function ProviderRow({
         />
         <div className="grow" style={{ minWidth: 0 }}>
           <div className="row" style={{ gap: 9 }}>
-            <span className="provider-name">
+            <span className="provider-name truncate">
               {group.display_name || group.provider}
             </span>
             <span className="mono faint" style={{ fontSize: 11.5 }}>{group.provider}/</span>
@@ -181,6 +209,7 @@ function ModelsTab({
           group={g}
           query={query}
           forceOpen={!!query}
+          startOpen={data.groups.length === 1}
           onPick={onPick}
         />
       ))}
@@ -393,13 +422,14 @@ export function ModelsPage() {
 
       {tab === "models" && (
         <>
+          {data && data.groups.length > 0 && <CatalogReadouts data={data} />}
           <RoutingExplain />
 
           <div className="toolbar mb16">
             <div className="search">
               <IconSearch />
               <input
-                placeholder="Search by route or name, e.g. openai/gpt-4o, claude, ollama"
+                placeholder="Search models"
                 value={query}
                 onChange={e => setQuery(e.target.value)}
                 aria-label="Search models"

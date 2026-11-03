@@ -47,3 +47,33 @@ export function Meter({
     </div>
   );
 }
+
+/**
+ * A graduated gauge for a reading that is not a spend cap: error rate against its redline, latency against
+ * the median, fallbacks against the whole. Notches are real thresholds the caller names; `max` is the scale end.
+ */
+export function Gauge({
+  value, max, notches = [], tone = "ok", label, valueText, ends,
+}: {
+  value: number;
+  max: number;
+  notches?: { at: number; hot?: boolean }[];
+  tone?: MeterTone;
+  label: string;
+  valueText: string;
+  ends: [string, string];
+}) {
+  const at = (v: number) => Math.max(0, Math.min(1, v / max));
+  return (
+    <div className="meter-wrap gauge">
+      <div
+        className="meter sm" data-tone={tone} role="meter" aria-label={label}
+        aria-valuemin={0} aria-valuemax={max} aria-valuenow={Math.min(value, max)} aria-valuetext={valueText}
+      >
+        <div className="meter-track"><div className="meter-fill" style={{ ["--p" as string]: at(value) }} /></div>
+        {notches.map(n => <i key={n.at} className={`meter-notch${n.hot ? " hot" : ""}`} style={{ ["--at" as string]: `${at(n.at) * 100}%` }} />)}
+      </div>
+      <div className="meter-scale" aria-hidden="true"><span>{ends[0]}</span><span>{ends[1]}</span></div>
+    </div>
+  );
+}
