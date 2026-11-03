@@ -22,6 +22,7 @@ export function Sidebar({ user }: { user: CurrentUser }) {
   const [theme, toggleTheme] = useTheme();
   return (
     <aside className="sidebar">
+      <div className="sidebar-inner">
       <div className="sidebar-brand">
         <Brand />
       </div>
@@ -63,6 +64,7 @@ export function Sidebar({ user }: { user: CurrentUser }) {
         >
           <IconExternal />Logout
         </a>
+      </div>
       </div>
     </aside>
   );
