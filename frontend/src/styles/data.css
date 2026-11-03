@@ -236,8 +236,12 @@ th[aria-sort="ascending"] svg { transform: rotate(180deg); }
   .tbl.cards tbody td.td-primary { grid-column: 1 / -1; }
   .tbl.cards tbody td.td-primary::before, .tbl.cards tbody td.td-bare::before { display: none; }
   .tbl.cards tbody td.td-wide { grid-column: 1 / -1; }
-  .tbl.cards tbody td.cell-actions { grid-column: 1 / -1; width: auto; flex-direction: row; justify-content: flex-start; gap: 8px; padding-top: 10px; }
+  .tbl.cards tbody tr { position: relative; }
+  .tbl.cards tbody td.cell-actions { position: absolute; top: 6px; right: 6px; width: auto; padding: 0; flex-direction: row; }
   .tbl.cards tbody td.cell-actions::before { display: none; }
+  .tbl.cards tbody td.td-primary { padding-right: 44px; }
+  .tbl.cards.cols3 tbody tr { grid-template-columns: repeat(3, minmax(0, 1fr)); }
+  .tbl.cards.cols3 tbody td.td-primary { grid-column: 1 / -1; padding-right: 0; }
   .tbl.cards tbody tr > td:first-child::before { display: none; }
   .tbl.cards .cell-trunc { max-width: 100%; }
 }

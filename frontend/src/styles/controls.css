@@ -245,3 +245,5 @@ input[type="checkbox"], input[type="radio"] { width: 16px; height: 16px; }
 }
 .sheet-links a:active, .sheet-links button:active { background: var(--sunk); }
 .sheet-links svg { width: 18px; height: 18px; color: var(--ink-3); }
+
+.field > .seg { align-self: flex-start; }

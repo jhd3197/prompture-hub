@@ -26,7 +26,7 @@ function ActivityTable({ rows }: { rows: UsageRow[] }) {
   const slowest = Math.max(...rows.map(r => r.latency_ms), 1);
   return (
     <div className="table-wrap">
-      <table className="tbl cards">
+      <table className="tbl cards cols3">
         <caption className="sr-only">Most recent metered calls, newest first</caption>
         <thead>
           <tr>
