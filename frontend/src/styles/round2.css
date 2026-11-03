@@ -172,5 +172,8 @@
 .pair-devices .dev b { font-weight: 620; flex: 1; min-width: 0; }
 .pair-devices .dev span.mono { font-size: 11.5px; color: var(--ink-3); }
 
+/* inline link in the pairing steps: keep the target at 24 px */
+.pair-steps a { display: inline-block; min-height: 24px; line-height: 24px; }
+
 [data-theme="dark"] .ch-bar:not(.bad) { fill: oklch(0.7 0.12 var(--accent-h)); }
 [data-theme="dark"] .meter[data-tone="ok"] .meter-fill { background: oklch(0.7 0.12 var(--accent-h)); }
