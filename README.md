@@ -119,10 +119,12 @@ curl -X POST http://localhost:1984/admin/keys \
   -d '{
     "name": "sketchy-app",
     "allowed_models": ["ollama/llama3.1:8b"],
-    "daily_spend_cap_usd": 1.0,
+    "spend_cap_usd": 1.0,
     "rate_limit_per_min": 30
   }'
 ```
+
+`spend_cap_usd` applies over the key's `spend_period` (day, week or month). It was previously called `daily_spend_cap_usd`; that name is deprecated but still accepted in request bodies, and responses return both fields with the same value. Using the old name adds `Deprecation` and `Warning` response headers. Older hub clients and prompture-desk keep working. Upgrading renames the database column (migration `0011`) automatically on boot; downgrade is supported with Alembic, and you should back up the database before upgrading.
 
 The response includes the plaintext key once — copy it now, you cannot retrieve it again. Hand it to the untrusted app. From inside that app:
 
@@ -227,7 +229,7 @@ These need the `HUB_ADMIN_TOKEN`. Spend adjustments count only in the cap window
 
 | Endpoint | What it does |
 |---|---|
-| `PATCH /admin/keys/{id}` | Change `daily_spend_cap_usd`, `spend_period` and `rate_limit_per_min`. At least one field is required; revoked keys return 404. |
+| `PATCH /admin/keys/{id}` | Change `spend_cap_usd`, `spend_period` and `rate_limit_per_min`. At least one field is required; revoked keys return 404. |
 | `POST /admin/keys/{id}/reset-spend` | Bring the key's spend in the current window to zero. Optional `reason`. |
 | `POST /admin/keys/{id}/grant` | Credit `amount_usd` (> 0) against the current window. Optional `reason`. |
 | `GET /admin/keys/{id}/adjustments` | Adjustments counting toward the current window. |
@@ -266,6 +268,24 @@ Caveats:
 - Estimates are heuristics; the real cost is still recorded after the call, so a call can finish above its estimate.
 - Coding-agent runs (`/v1/coding-agents/run`) have no per-token price and are not reserved; they only get the early cap and rate-limit check.
 - Custom `openai_compatible/<profile>/...` models count as unpriced unless Prompture knows their rates.
+
+### Billing reconciliation
+
+Compares what the hub recorded (`UsageRecord.cost_usd`) with what providers say they billed. `GET /admin/billing/reconciliation?period=day|week|month&refresh=false` (admin bearer; default `month`) returns one row per provider; the dashboard's **Billing** page (`/api/billing/reconciliation`, session login) shows the same data with a period selector and a Refresh button.
+
+The window runs from the UTC period start to the next UTC midnight, so provider daily buckets line up. Hub spend counts only successful calls (`status = ok`), grouped by the provider that served them (`claude` and `anthropic` are the same). Credentials are read by Prompture from the environment, never stored in the hub:
+
+| Provider | Source | Needs | Result |
+| --- | --- | --- | --- |
+| `openai` | organization cost report | `OPENAI_ADMIN_KEY` | compared |
+| `anthropic` | organization cost report | `ANTHROPIC_ADMIN_KEY` | compared |
+| `openrouter` | key usage (`usage_daily/weekly/monthly`) | `OPENROUTER_API_KEY` | compared; `not_comparable` if the period figure is missing (all-time spend is not comparable) |
+| `deepseek`, `moonshot` | account balance | `DEEPSEEK_API_KEY` / `MOONSHOT_API_KEY` | `balance_only`, nothing to compare |
+| anything else with hub spend | none | | `unsupported` |
+
+Statuses: `ok`, `mismatch`, `not_configured` (hub spend still shown, with a hint naming the variable), `error` (fetch failed; short safe message, other providers unaffected), `not_comparable` (incomplete report, non-USD currency, no matching period figure), `balance_only`, `unsupported`. A difference (provider minus hub) is a `mismatch` only if it exceeds both `HUB_BILLING_TOLERANCE_PCT` (default 10) and `HUB_BILLING_TOLERANCE_USD` (default 0.50). Results are cached in-process for `HUB_BILLING_CACHE_SECONDS` (default 300) unless `refresh=true`.
+
+Caveats, also returned per row: provider totals cover the whole organization (or key, for OpenRouter), so activity outside the hub counts; billing data can lag by hours; Anthropic's cost report excludes Priority Tier costs; virtual models (`combo/`, `auto/`) with no `served_by` cannot be attributed to a provider and are left out. Prompture's `reconcile_costs` is not used: it needs a declared organization id and a locally attested scope, and with the hub's whole-org comparison it would add no information.
 
 ### Alerts
 

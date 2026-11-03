@@ -1,6 +1,9 @@
 import { useEffect, useState } from "react";
 import { Link, useSearchParams } from "react-router-dom";
 import { ApiError, api } from "../api";
+import { useAsync } from "../util/hooks";
+import { timeAgo } from "../util/format";
+import { PageHead } from "../components/PageHead";
 import { useToast } from "../components/Toast";
 import { IconAlert, IconCheck, IconLock, IconShield } from "../icons";
 import type { PairingInfo } from "../types";
@@ -26,6 +29,9 @@ export function PairPage() {
   const [name, setName] = useState("");
   const [allowControl, setAllowControl] = useState(false);
 
+  const devs = useAsync(() => api.devices(), []);
+  const typed = code.replace("-", "").length;
+
   const lookup = async (value: string) => {
     setError(null);
     setStep({ kind: "loading" });
@@ -37,7 +43,7 @@ export function PairPage() {
     } catch (e) {
       setError(
         e instanceof ApiError && e.status === 404
-          ? "No pending pairing with that code. Codes expire after 10 minutes — start again on the device."
+          ? "No pending pairing with that code. Codes expire after 10 minutes, so start again on the device."
           : String(e),
       );
       setStep({ kind: "enter" });
@@ -72,18 +78,15 @@ export function PairPage() {
   };
 
   return (
-    <div className="container" style={{ maxWidth: 560 }}>
-      <div className="page-head">
-        <div className="grow">
-          <h1 className="page-title">Pair a device</h1>
-          <p className="page-sub">
-            A desktop companion or widget is asking to watch this hub. Enter the code it shows,
-            check what it wants, and approve it.
-          </p>
-        </div>
-      </div>
+    <div className="container">
+      <PageHead
+        title="Pair a device"
+        sub="A desktop companion or widget is asking to watch this hub. Enter the code it shows, check what it wants, and approve it."
+      />
 
-      <div className="card card-pad">
+      <div className="cols cols-7-5">
+      <div className="stack">
+      <div className="panel panel-pad rise pair-panel">
         {(step.kind === "enter" || step.kind === "loading") && (
           <form
             onSubmit={e => { e.preventDefault(); if (code.length === 9) lookup(code); }}
@@ -93,19 +96,22 @@ export function PairPage() {
               <label htmlFor="pair-code">Code shown on the device</label>
               <input
                 id="pair-code"
-                className="input mono"
-                style={{ fontSize: 22, letterSpacing: "0.12em", textAlign: "center" }}
+                className="input mono tnum"
+                style={{ fontSize: 28, letterSpacing: "0.18em", textAlign: "center", minHeight: 64 }}
                 placeholder="XXXX-XXXX"
                 autoComplete="off"
-                autoFocus
                 value={code}
                 onChange={e => setCode(formatCode(e.target.value))}
                 aria-invalid={error ? "true" : undefined}
               />
               {error && <span className="hint field-error">{error}</span>}
             </div>
+            <div className="code-scale" role="img" aria-label={`${typed} of 8 characters entered`}>
+              {Array.from({ length: 8 }, (_, i) => <i key={i} className={i < typed ? "on" : ""} />)}
+              <span className="mono">{typed}/8</span>
+            </div>
             <button className="btn btn-primary btn-block" disabled={code.length !== 9 || step.kind === "loading"}>
-              {step.kind === "loading" ? "Looking up…" : "Continue"}
+              {step.kind === "loading" ? "Looking up…" : typed < 8 ? `Enter ${8 - typed} more character${8 - typed === 1 ? "" : "s"}` : "Continue"}
             </button>
           </form>
         )}
@@ -182,12 +188,29 @@ export function PairPage() {
           </div>
         )}
       </div>
+      <section className="panel rise pair-devices" style={{ ["--i" as string]: 2 }} aria-labelledby="pair-have">
+        <div className="panel-head"><h2 id="pair-have">Already paired</h2><span className="sub">{devs.data ? `${devs.data.filter(d => d.active).length} active` : "loading"}</span></div>
+        {devs.data && devs.data.length === 0 && <p className="muted" style={{ margin: 0, padding: 16, fontSize: "var(--t-sm)" }}>No devices yet. The first one you approve shows up here.</p>}
+        {(devs.data ?? []).slice(0, 4).map(d => (
+          <div className="dev" key={d.id}>
+            <b className="truncate">{d.name}</b>
+            <span className="mono">{d.last_used_at ? `seen ${timeAgo(d.last_used_at)}` : "never seen"}</span>
+            {d.active ? <span className="chip chip-ok"><span className="dot" />active</span> : <span className="chip chip-mute"><span className="dot" />revoked</span>}
+          </div>
+        ))}
+      </section>
+      </div>
 
-      <p className="muted mt16" style={{ fontSize: 12.5 }}>
-        <IconLock style={{ width: 13, height: 13, verticalAlign: "-2px", marginRight: 5 }} />
-        Devices get their own token, separate from hub keys and from your login. It never
-        allows model calls.
-      </p>
+      <aside className="panel rise pair-side" style={{ ["--i" as string]: 1 }} aria-labelledby="pair-how">
+        <div className="panel-head"><h2 id="pair-how">What approving does</h2><span className="sub">device flow</span></div>
+        <ol className="pair-steps">
+          <li><b>The device asks for a code.</b><span>It shows eight characters and waits. Codes expire after 10 minutes.</span></li>
+          <li><b>You check what it wants.</b><span>Read-only is the default. Control (pause keys, edit caps, acknowledge alerts) is a separate tick.</span></li>
+          <li><b>It gets its own token.</b><span>Separate from hub keys and your login. It never allows model calls, and you can revoke it under <Link to="/settings/devices">Settings › Devices</Link>.</span></li>
+        </ol>
+        <p className="pair-note"><IconLock />Nothing is granted until you approve.</p>
+      </aside>
+      </div>
     </div>
   );
 }

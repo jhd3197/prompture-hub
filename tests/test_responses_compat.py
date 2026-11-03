@@ -39,7 +39,7 @@ def _key() -> str:
     r = _client().post(
         "/admin/keys",
         headers={"Authorization": "Bearer test-token"},
-        json={"name": "codex", "daily_spend_cap_usd": 100.0, "rate_limit_per_min": 1000},
+        json={"name": "codex", "spend_cap_usd": 100.0, "rate_limit_per_min": 1000},
     )
     return r.json()["key"]
 

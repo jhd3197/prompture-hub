@@ -59,7 +59,7 @@ def stub_driver(monkeypatch):
 
 
 def _key(**extra) -> str:
-    payload = {"name": "k", "daily_spend_cap_usd": 100.0, **extra}
+    payload = {"name": "k", "spend_cap_usd": 100.0, **extra}
     r = _client().post("/admin/keys", headers=ADMIN, json=payload)
     assert r.status_code == 201, r.text
     return r.json()["key"]
@@ -121,7 +121,7 @@ class TestAttribution:
         assert _projects() == ["cli", "codex"]
 
     def test_quota_rejection_is_attributed(self, stub_driver):
-        key = _key(daily_spend_cap_usd=0.0)
+        key = _key(spend_cap_usd=0.0)
         r = _chat(key, "tight")
         assert r.status_code == 402
 

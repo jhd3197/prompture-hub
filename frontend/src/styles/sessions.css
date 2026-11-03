@@ -1,0 +1,32 @@
+/* Sessions: master list and transcript. */
+.sessions-cols { grid-template-columns: minmax(280px, 4fr) minmax(0, 8fr); }
+@media (max-width: 1000px) { .sessions-cols { grid-template-columns: minmax(0, 1fr); } }
+.sess-list { list-style: none; margin: 0; padding: 0; max-height: calc(100dvh - var(--bar-h) - 200px); overflow-y: auto; }
+.sess {
+  position: relative; display: flex; align-items: center; gap: 12px; width: 100%; min-height: 56px; padding: 8px 16px; text-align: left;
+  border: 0; border-bottom: 1px solid var(--line); background: transparent; color: var(--ink);
+  transition: background var(--dur-1) var(--glide);
+}
+.sess::before { content: ""; position: absolute; left: 0; top: 8px; bottom: 8px; width: 3px; border-radius: 0 3px 3px 0; background: var(--accent); transform: scaleY(0); transition: transform 260ms var(--settle); }
+.sess:hover { background: var(--sunk); }
+.sess:hover::before { transform: scaleY(0.5); }
+.sess.on { background: var(--sunk); }
+.sess.on::before { transform: scaleY(1); }
+.sess-main { flex: 1; min-width: 0; display: flex; flex-direction: column; }
+.sess-title { font-weight: 620; font-size: var(--t-sm); }
+.sess-sub { font-size: 11.5px; color: var(--ink-3); }
+.sess-when { font-size: var(--t-xs); white-space: nowrap; }
+
+.msgs { padding: 16px; display: flex; flex-direction: column; gap: 12px; }
+.msg { border: 1px solid var(--line); border-radius: var(--r); background: var(--panel); overflow: clip; border-left: 3px solid var(--line-2); }
+.msg-user { border-left-color: var(--blue-ink); }
+.msg-assistant { border-left-color: var(--accent); }
+.msg-system { border-left-color: var(--ink-3); }
+.msg-head { display: flex; align-items: center; gap: 12px; padding: 8px 14px; background: var(--sunk); border-bottom: 1px solid var(--line); flex-wrap: wrap; }
+.msg-role { display: inline-flex; align-items: center; gap: 6px; font-weight: 680; font-size: var(--t-xs); text-transform: capitalize; }
+.msg-role svg { width: 14px; height: 14px; color: var(--ink-3); }
+.msg-cost { display: inline-flex; align-items: center; gap: 8px; margin-left: auto; font-size: 11.5px; color: var(--ink-2); }
+.msg-bar { width: 48px; height: 4px; background: var(--line); border-radius: 2px; position: relative; overflow: hidden; }
+.msg-bar i { position: absolute; inset: 0; background: var(--accent); transform-origin: 0 50%; transform: scaleX(var(--p, 0)); animation: fill-x 700ms var(--settle) both; }
+.msg-head time { font-size: 11.5px; }
+.msg-body { padding: 12px 14px; font-size: var(--t-sm); line-height: 1.6; white-space: pre-wrap; overflow-wrap: anywhere; }

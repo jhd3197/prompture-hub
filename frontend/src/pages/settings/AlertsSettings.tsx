@@ -1,5 +1,7 @@
 import { useEffect, useState } from "react";
 import { api } from "../../api";
+import { ErrorState } from "../../components/ErrorState";
+import { SkelRows } from "../../components/Skeleton";
 import { EmptyState } from "../../components/EmptyState";
 import { useToast } from "../../components/Toast";
 import { IconBolt, IconCheck, IconPlus, IconTrash } from "../../icons";
@@ -125,13 +127,16 @@ export function AlertsSettings() {
   const [rules, setRules] = useState<AlertRule[]>([]);
   const [events, setEvents] = useState<AlertEvent[]>([]);
   const [keys, setKeys] = useState<HubKey[]>([]);
+  const [loaded, setLoaded] = useState(false);
+  const [loadErr, setLoadErr] = useState<string | null>(null);
 
   const load = async () => {
     try {
       const [r, e, k] = await Promise.all([api.alertRules(), api.alerts(), api.listKeys()]);
-      setRules(r); setEvents(e); setKeys(k);
+      setRules(r); setEvents(e); setKeys(k); setLoaded(true); setLoadErr(null);
     } catch (err) {
-      toast(`Couldn't load alerts: ${err}`);
+      setLoadErr(String(err));
+      if (loaded) toast(`Couldn't load alerts: ${err}`);
     }
   };
   // eslint-disable-next-line react-hooks/exhaustive-deps
@@ -150,6 +155,10 @@ export function AlertsSettings() {
     await api.ackAlert(event.alert_id);
     load();
   };
+
+  if (!loaded) {
+    return <div className="panel">{loadErr ? <ErrorState title="Couldn't load alerts" error={loadErr} onRetry={load} /> : <SkelRows rows={4} label="Loading alerts" />}</div>;
+  }
 
   return (
     <div style={{ display: "flex", flexDirection: "column", gap: 18 }}>
@@ -188,7 +197,7 @@ export function AlertsSettings() {
       <div className="card">
         <div className="card-head"><h3>Recent alerts</h3><span className="sub">newest first</span></div>
         {events.length === 0 ? (
-          <div className="empty"><p>Nothing has fired yet.</p></div>
+          <div className="state"><p>Nothing has fired yet. Alerts that trigger will be listed here with their value.</p></div>
         ) : (
           <div className="table-wrap">
             <table className="tbl">

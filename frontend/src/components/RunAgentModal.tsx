@@ -329,7 +329,7 @@ export function RunAgentModal({
               autoFocus
               style={{ minHeight: 120 }}
             />
-            <span className="hint">Plain instruction for the agent. Be specific — agents follow the literal task.</span>
+            <span className="hint">Plain instruction for the agent. Be specific, agents follow the literal task.</span>
           </div>
 
           <div className="field">
@@ -398,7 +398,7 @@ export function RunAgentModal({
               <span className="hint">
                 {agent.capabilities.structured_output
                   ? "JSON populates the parsed event list below the output."
-                  : "Only Text is available — this agent doesn't expose structured events."}
+                  : "Only Text is available, this agent doesn't expose structured events."}
               </span>
             </div>
           </div>
@@ -413,7 +413,7 @@ export function RunAgentModal({
                 placeholder="my-project"
               />
               <span className="hint">
-                Pick an existing folder or type a new one — it'll be created on the fly.
+                Pick an existing folder or type a new one, it'll be created on the fly.
                 Empty = workspace root. Hub refuses paths that escape the workspace.
               </span>
             </div>

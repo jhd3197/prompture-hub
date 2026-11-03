@@ -37,7 +37,7 @@ export function resetFolderPickerCache() {
 /**
  * Subpath combobox: existing subdirs under ``HUB_AGENT_WORKSPACE`` get
  * autocompleted via `<datalist>`, but the user can still type any
- * relative path — the backend creates it on demand inside the workspace
+ * relative path, the backend creates it on demand inside the workspace
  * (and refuses anything that escapes the tree).
  */
 export function FolderPicker({

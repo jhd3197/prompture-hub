@@ -1,5 +1,7 @@
 import { useEffect, useMemo, useState } from "react";
 import { CopyButton } from "../../components/CopyButton";
+import { ErrorState } from "../../components/ErrorState";
+import { SkelRows } from "../../components/Skeleton";
 import { EmptyState } from "../../components/EmptyState";
 import {
   IconAlert, IconChevronRight, IconCode, IconExternal, IconSearch, IconX,
@@ -197,15 +199,17 @@ export function ApiSettings() {
   const [error, setError] = useState<string | null>(null);
   const [loading, setLoading] = useState(true);
   const [query, setQuery] = useState("");
+  const [tick, setTick] = useState(0);
 
   useEffect(() => {
     let alive = true;
+    setLoading(true); setError(null);
     fetch("/openapi.json")
       .then(r => r.ok ? r.json() : Promise.reject(`${r.status} ${r.statusText}`))
       .then(s => { if (alive) { setSchema(s); setLoading(false); } })
       .catch(e => { if (alive) { setError(String(e)); setLoading(false); } });
     return () => { alive = false; };
-  }, []);
+  }, [tick]);
 
   const flat = useMemo(() => schema ? flatten(schema) : [], [schema]);
 
@@ -230,8 +234,8 @@ export function ApiSettings() {
     return Array.from(m.entries()).sort(([a], [b]) => a.localeCompare(b));
   }, [filtered]);
 
-  if (loading && !schema) return <div className="empty"><p>Loading OpenAPI…</p></div>;
-  if (error) return <EmptyState icon={<IconAlert />} title="Couldn't load OpenAPI">{error}</EmptyState>;
+  if (loading && !schema) return <div className="panel"><SkelRows rows={6} label="Loading the API schema" /></div>;
+  if (error) return <div className="panel"><ErrorState title="Couldn't load the API schema" error={error} onRetry={() => setTick(t => t + 1)} /></div>;
 
   return (
     <div style={{ display: "flex", flexDirection: "column", gap: 14 }}>

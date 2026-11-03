@@ -42,8 +42,9 @@ def _visible_keys(principal: Principal) -> list[HubKey]:
 
 def _key_limits(key: HubKey) -> dict[str, Any]:
     period = (key.spend_period or "day").lower()
-    spent = spend_in_window(key.id, period)
-    cap = key.daily_spend_cap_usd
+    # Grants can push the window sum below zero; the public figures never go negative.
+    spent = max(0.0, spend_in_window(key.id, period))
+    cap = key.spend_cap_usd
     return {
         "id": key.id,
         "name": key.name,
@@ -55,7 +56,7 @@ def _key_limits(key: HubKey) -> dict[str, Any]:
             "cap_usd": cap,
             "spent_usd": round(spent, 6),
             "reserved_usd": round(reserved_usd(key.id), 6),
-            "fraction_used": round(spent / cap, 4) if cap > 0 else None,
+            "fraction_used": max(0.0, round(spent / cap, 4)) if cap > 0 else None,
             "resets_at": iso_utc(window_end(period)),
             "source": "hub",
         },

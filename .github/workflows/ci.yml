@@ -45,13 +45,21 @@ jobs:
           path: src/prompture_hub/static/app/
           if-no-files-found: error
 
+  # Prompture variants under test:
+  #   floor  - exactly the minimum in pyproject.toml (blocking): proves the declared
+  #            lower bound is real.
+  #   latest - newest release on PyPI (blocking): catches upstream releases that
+  #            break us. May equal the floor until a newer release ships.
+  #   dev    - Prompture's git dev branch (advisory, see prompture-dev below).
+  # Full cross product: the suite is fast, so every Python runs both variants.
   backend:
-    name: Python tests (${{ matrix.python-version }})
+    name: Python tests (${{ matrix.python-version }}, prompture ${{ matrix.prompture }})
     runs-on: ubuntu-latest
     strategy:
       fail-fast: false
       matrix:
-        python-version: ["3.10", "3.11", "3.12"]
+        python-version: ["3.10", "3.11", "3.12", "3.13"]
+        prompture: [floor, latest]
     steps:
       - name: Checkout
         uses: actions/checkout@v4
@@ -67,7 +75,36 @@ jobs:
           python -m pip install --upgrade pip
           pip install -e ".[dev]"
 
+      - name: Pin Prompture to the declared floor
+        if: matrix.prompture == 'floor'
+        run: |
+          FLOOR=$(grep -oP '"prompture>=\K[0-9][0-9.]*' pyproject.toml)
+          [ -n "$FLOOR" ] || { echo "::error::could not parse the prompture floor from pyproject.toml"; exit 1; }
+          echo "Declared floor: $FLOOR"
+          pip install "prompture==$FLOOR"
+          echo "PROMPTURE_FLOOR=$FLOOR" >> "$GITHUB_ENV"
+
+      - name: Upgrade Prompture to the latest release
+        if: matrix.prompture == 'latest'
+        run: pip install --upgrade prompture
+
+      - name: Show installed Prompture
+        run: |
+          pip show prompture
+          python - <<'PY'
+          import os
+          from importlib.metadata import version
+          from packaging.version import Version
+          v = Version(version("prompture"))
+          floor = os.environ.get("PROMPTURE_FLOOR")
+          if floor:
+              assert v == Version(floor), f"expected floor {floor}, got {v}"
+          print(f"prompture {v} ({'floor' if floor else 'latest resolved'})")
+          PY
+
+      # Once per run, on the newest-deps leg; blocking.
       - name: Lint with ruff
+        if: matrix.python-version == '3.12' && matrix.prompture == 'latest'
         run: ruff check .
 
       # The app boots without the SPA bundle (the /static mount is skipped when

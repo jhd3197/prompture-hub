@@ -1,6 +1,7 @@
-import { useEffect, type ReactNode } from "react";
+import { useEffect, useId, useRef, type ReactNode } from "react";
 import { createPortal } from "react-dom";
 import { IconX } from "../icons";
+import { useFocusTrap } from "../util/hooks";
 
 interface Props {
   title: string;
@@ -12,29 +13,34 @@ interface Props {
 }
 
 export function Modal({ title, desc, children, footer, onClose, wide }: Props) {
+  const ref = useRef<HTMLDivElement>(null);
+  const titleId = useId();
+  useFocusTrap(ref);
+
   useEffect(() => {
-    const onKey = (e: KeyboardEvent) => { if (e.key === "Escape") onClose(); };
+    const onKey = (e: KeyboardEvent) => { if (e.key === "Escape") { e.stopPropagation(); onClose(); } };
     window.addEventListener("keydown", onKey);
-    return () => window.removeEventListener("keydown", onKey);
+    const prev = document.body.style.overflow;
+    document.body.style.overflow = "hidden";
+    return () => { window.removeEventListener("keydown", onKey); document.body.style.overflow = prev; };
   }, [onClose]);
 
-  // Portal to <body> so any ancestor with `transform`, `filter`, etc.
-  // can't trap our position:fixed overlay (the agent-card's fade-in
-  // animation does exactly that).
+  // Portaled to <body> so no ancestor transform can trap the fixed overlay.
   return createPortal(
     <div className="overlay" onMouseDown={onClose}>
       <div
+        ref={ref}
         className="modal"
-        style={wide ? { maxWidth: 600 } : undefined}
+        style={wide ? { maxWidth: 640 } : undefined}
         role="dialog"
         aria-modal="true"
-        aria-label={title}
+        aria-labelledby={titleId}
         onMouseDown={e => e.stopPropagation()}
       >
         <div className="modal-head">
-          <div className="row between">
-            <h2>{title}</h2>
-            <button className="icon-btn" onClick={onClose} aria-label="Close dialog">
+          <div className="row between" style={{ alignItems: "flex-start" }}>
+            <h2 id={titleId}>{title}</h2>
+            <button type="button" className="icon-btn" onClick={onClose} aria-label="Close dialog">
               <IconX />
             </button>
           </div>

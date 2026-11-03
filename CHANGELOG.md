@@ -6,7 +6,16 @@ and this project adheres to [Semantic Versioning](https://semver.org/).
 
 ## [Unreleased]
 
+### Changed
+- Dashboard: redesigned around a ticked scale. A top bar replaces the sidebar (with a needle that settles under the current page and a bottom tab bar on phones), pages open with a drawn rule, and figures are mono readouts with sparklines. New light and dark palettes keep the selectable accent hue. Fonts (Schibsted Grotesk, Geist Mono) are bundled with the app instead of loaded from Google Fonts. No API changes.
+- Dashboard: hand-built SVG charts and meters. Spend and request traces with a hover and keyboard crosshair and a table view, latency by day and by model, cap meters per key with alarm notches at 70% and 90% and a projected pace, ranked spend bars, provider share, and hub against provider bars on Billing. Per-key spend inside the cap window is derived from `/api/analytics` and excludes manual adjustments.
+- Dashboard: command palette on Ctrl or Cmd K and `/` with fuzzy search over pages, actions, keys and sessions; `g` then a letter navigates, `c` creates a key, `?` lists shortcuts.
+- Dashboard: sortable tables with sticky headers, row menus, click-to-copy ids, a density setting, skeleton loading, error states with retry, designed empty states, reduced-motion support, and a static app shell with meta, Open Graph tags and a favicon in `index.html`.
+
 ### Added
+- Billing reconciliation: `GET /admin/billing/reconciliation?period=day|week|month&refresh=false` compares hub-recorded spend with OpenAI/Anthropic organization cost reports (`OPENAI_ADMIN_KEY` / `ANTHROPIC_ADMIN_KEY`) and OpenRouter usage, reports DeepSeek/Moonshot balances, and flags mismatches. Provider failures only affect their own row.
+- Dashboard: a Billing page (`/billing`, backed by `GET /api/billing/reconciliation`) with period selector, refresh, status badges and per-provider caveats.
+- Settings `HUB_BILLING_TOLERANCE_PCT` (10), `HUB_BILLING_TOLERANCE_USD` (0.50) and `HUB_BILLING_CACHE_SECONDS` (300).
 - Admin cap controls: `PATCH /admin/keys/{id}` changes a key's spend cap, period and rate limit (admin token).
 - `rate_limit_per_min` can now be changed through `PATCH /v1/keys/{id}` and is part of the returned key state.
 - Dashboard: an "Edit limits" button on each active key opens a modal to edit spend cap, period and rate limit.
@@ -17,6 +26,13 @@ and this project adheres to [Semantic Versioning](https://semver.org/).
 
 ### Changed
 - The cap window spend (used by quota checks, `/v1/limits` and alerts) now includes spend adjustments made in the window, and can be negative after a grant.
+- Renamed the key spend cap from `daily_spend_cap_usd` to `spend_cap_usd` (the cap is not daily; see `spend_period`). Migration `0011` renames the `hubkey` column in place (batch mode, data kept, reversible with `alembic downgrade`); it runs automatically on boot. Back up the database before upgrading.
+- Audit rows written from now on use `spend_cap_usd` in `before`/`after`; rows written earlier keep `daily_spend_cap_usd` and are returned unchanged.
+- The `key.updated` live event `changes` carries both names when the cap changed.
+- CI: backend tests now run on Python 3.10-3.13 against both the declared Prompture floor (parsed from `pyproject.toml`) and the latest PyPI release; ruff runs once. The non-blocking Prompture `dev` job is unchanged.
+
+### Deprecated
+- `daily_spend_cap_usd` is a deprecated alias of `spend_cap_usd`. Request bodies of `POST /admin/keys`, `PATCH /admin/keys/{id}`, `PATCH /v1/keys/{id}` and `POST /api/keys` accept either name (sending both with different values returns 422); using the old name adds `Deprecation: true` and a `Warning: 299` header and logs once per process. Key objects in responses return both names with the same value. `/v1/limits` is unchanged. Older hub clients and prompture-desk keep working. The alias will not be removed before a future minor version.
 
 ### Hardened
 - Cost reservations: each admitted call holds an estimated cost until it settles, so concurrent and streaming calls can no longer overshoot a spend cap, and in-flight calls count toward the rate limit. Applies to chat completions, embeddings, Anthropic messages, Responses and `/v1/extract`. The ledger is process-local (one hub process). Coding-agent runs are not reserved.

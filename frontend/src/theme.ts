@@ -1,55 +1,81 @@
-import { useEffect, useState } from "react";
+import { useSyncExternalStore } from "react";
 
 export type Theme = "light" | "dark";
+export type Density = "comfortable" | "compact";
 
 const THEME_KEY = "ph-theme";
 const ACCENT_KEY = "ph-accent";
-const DEFAULT_ACCENT = 155; // green — matches design system default
+const DENSITY_KEY = "ph-density";
+const DEFAULT_ACCENT = 155;
 
-function getInitialTheme(): Theme {
-  if (typeof window === "undefined") return "light";
-  const saved = window.localStorage.getItem(THEME_KEY);
-  if (saved === "light" || saved === "dark") return saved;
-  return window.matchMedia?.("(prefers-color-scheme: dark)").matches
-    ? "dark"
-    : "light";
+/** One shared store per preference, so the top bar, the palette and Settings always agree. */
+function store<T>(read: () => T, apply: (v: T) => void) {
+  let value = read();
+  const subs = new Set<() => void>();
+  apply(value);
+  return {
+    get: () => value,
+    set: (next: T) => { value = next; apply(next); subs.forEach(f => f()); },
+    subscribe: (cb: () => void) => { subs.add(cb); return () => { subs.delete(cb); }; },
+  };
 }
 
-function getInitialAccent(): number {
-  if (typeof window === "undefined") return DEFAULT_ACCENT;
-  const saved = window.localStorage.getItem(ACCENT_KEY);
-  const n = saved == null ? NaN : Number(saved);
-  return Number.isFinite(n) ? n : DEFAULT_ACCENT;
+function safeGet(key: string): string | null {
+  try { return window.localStorage.getItem(key); } catch { return null; }
 }
+function safeSet(key: string, v: string) {
+  try { window.localStorage.setItem(key, v); } catch { /* storage can be blocked */ }
+}
+
+const themeStore = store<Theme>(
+  () => {
+    const saved = safeGet(THEME_KEY);
+    if (saved === "light" || saved === "dark") return saved;
+    return window.matchMedia?.("(prefers-color-scheme: dark)").matches ? "dark" : "light";
+  },
+  t => {
+    document.documentElement.setAttribute("data-theme", t);
+    safeSet(THEME_KEY, t);
+    document.querySelector('meta[name="theme-color"]')?.setAttribute("content", t === "dark" ? "#0b0d10" : "#f4f5f7");
+  },
+);
+
+const accentStore = store<number>(
+  () => {
+    const n = Number(safeGet(ACCENT_KEY));
+    return safeGet(ACCENT_KEY) != null && Number.isFinite(n) ? n : DEFAULT_ACCENT;
+  },
+  h => {
+    document.documentElement.style.setProperty("--accent-h", String(h));
+    safeSet(ACCENT_KEY, String(h));
+  },
+);
+
+const densityStore = store<Density>(
+  () => (safeGet(DENSITY_KEY) === "compact" ? "compact" : "comfortable"),
+  d => {
+    document.documentElement.setAttribute("data-density", d);
+    safeSet(DENSITY_KEY, d);
+  },
+);
 
 export function useTheme(): [Theme, () => void] {
-  const [theme, setTheme] = useState<Theme>(getInitialTheme);
-
-  useEffect(() => {
-    document.documentElement.setAttribute("data-theme", theme);
-    window.localStorage.setItem(THEME_KEY, theme);
-  }, [theme]);
-
-  const toggle = () => setTheme(t => (t === "dark" ? "light" : "dark"));
-  return [theme, toggle];
+  const theme = useSyncExternalStore(themeStore.subscribe, themeStore.get);
+  return [theme, () => themeStore.set(themeStore.get() === "dark" ? "light" : "dark")];
 }
 
 /**
- * OKLCH hue for the accent colour. Set on document root so every
- * ``var(--accent)`` derived shade tracks the choice. Persisted to
- * ``localStorage`` so the picker remembers across reloads.
- *
- * Defaults to 155 (green) — the design's stock accent.
+ * OKLCH hue for the accent colour, set on the document root so every derived shade tracks it.
+ * Persisted so the picker remembers across reloads.
  */
 export function useAccent(): [number, (next: number) => void] {
-  const [hue, setHue] = useState<number>(getInitialAccent);
+  const hue = useSyncExternalStore(accentStore.subscribe, accentStore.get);
+  return [hue, accentStore.set];
+}
 
-  useEffect(() => {
-    document.documentElement.style.setProperty("--accent-h", String(hue));
-    window.localStorage.setItem(ACCENT_KEY, String(hue));
-  }, [hue]);
-
-  return [hue, setHue];
+export function useDensity(): [Density, (next: Density) => void] {
+  const d = useSyncExternalStore(densityStore.subscribe, densityStore.get);
+  return [d, densityStore.set];
 }
 
 export const ACCENT_PRESETS: Array<{ name: string; hue: number }> = [

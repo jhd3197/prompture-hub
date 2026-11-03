@@ -3,6 +3,9 @@ import { useSearchParams } from "react-router-dom";
 import { api } from "../api";
 import { AgentCard } from "../components/AgentCard";
 import { EmptyState } from "../components/EmptyState";
+import { ErrorState } from "../components/ErrorState";
+import { PageHead } from "../components/PageHead";
+import { SkelRows } from "../components/Skeleton";
 import { ProviderLogo } from "../components/ProviderLogo";
 import { SnippetModal } from "../components/SnippetModal";
 import {
@@ -41,15 +44,43 @@ function RoutingExplain() {
   );
 }
 
+function CatalogReadouts({ data }: { data: ModelsResponse }) {
+  const local = data.groups.filter(g => g.is_local).length;
+  const g = data.groups[0];
+  const m = g?.models[0];
+  return (
+    <div className="cols cols-7-5 mb24">
+      <div className="readouts rise" style={{ ["--cols" as string]: "repeat(3, minmax(0, 1fr))" }}>
+        <div className="readout"><span className="caption readout-label"><IconGrid />Chat models</span><div className="readout-value">{data.total}</div><div className="readout-meta">discovered now</div></div>
+        <div className="readout"><span className="caption readout-label"><IconRoute />Providers</span><div className="readout-value">{data.groups.length}</div><div className="readout-meta">{local ? `${local} local` : "all hosted"}</div></div>
+        <div className="readout"><span className="caption readout-label"><IconLayers />Per provider</span><div className="readout-value">{data.groups.length ? Math.round(data.total / data.groups.length) : 0}</div><div className="readout-meta">models on average</div></div>
+      </div>
+      {g && m && (
+        <section className="panel rise route-ruler" style={{ ["--i" as string]: 1 }} aria-label="Anatomy of a route">
+          <div className="panel-head"><h2>Anatomy of a route</h2><span className="sub">first model found</span></div>
+          <div className="rr-body">
+            <div className="rr-route mono" aria-label={`${g.provider}/${m}`}>
+              <span className="rr-prov truncate">{g.provider}</span><span className="rr-slash">/</span><span className="rr-model truncate">{m}</span>
+            </div>
+            <div className="rr-scale" aria-hidden="true"><i /><i /></div>
+            <div className="rr-legend"><span>prefix picks the driver</span><span>the rest goes upstream</span></div>
+          </div>
+        </section>
+      )}
+    </div>
+  );
+}
+
 function ProviderRow({
-  group, query, forceOpen, onPick,
+  group, query, forceOpen, onPick, startOpen,
 }: {
   group: ProviderGroup;
   query: string;
   forceOpen: boolean;
+  startOpen?: boolean;
   onPick: (route: string) => void;
 }) {
-  const [open, setOpen] = useState(false);
+  const [open, setOpen] = useState(!!startOpen);
   const isOpen = forceOpen || open;
 
   const q = query.trim().toLowerCase();
@@ -89,7 +120,7 @@ function ProviderRow({
         />
         <div className="grow" style={{ minWidth: 0 }}>
           <div className="row" style={{ gap: 9 }}>
-            <span className="provider-name">
+            <span className="provider-name truncate">
               {group.display_name || group.provider}
             </span>
             <span className="mono faint" style={{ fontSize: 11.5 }}>{group.provider}/</span>
@@ -152,7 +183,7 @@ function ModelsTab({
   query: string;
   onPick: (route: string) => void;
 }) {
-  if (loading && !data) return <div className="empty"><p>Discovering models…</p></div>;
+  if (loading && !data) return <div className="panel"><SkelRows rows={5} label="Discovering models" /></div>;
   if (data && data.groups.length === 0) {
     return (
       <EmptyState icon={<IconGrid />} title="No chat models discoverable">
@@ -178,6 +209,7 @@ function ModelsTab({
           group={g}
           query={query}
           forceOpen={!!query}
+          startOpen={data.groups.length === 1}
           onPick={onPick}
         />
       ))}
@@ -203,11 +235,9 @@ function AgentsTab() {
   };
   useEffect(() => { load(); }, []);
 
-  if (loading && !data) return <div className="empty"><p>Discovering agents…</p></div>;
+  if (loading && !data) return <div className="panel"><SkelRows rows={5} label="Discovering agents" /></div>;
   if (error) {
-    return (
-      <EmptyState icon={<IconAlert />} title="Couldn't discover agents">{error}</EmptyState>
-    );
+    return <div className="panel"><ErrorState title="Couldn't discover agents" error={error} onRetry={load} /></div>;
   }
   if (!data || data.agents.length === 0) {
     return (
@@ -270,9 +300,9 @@ function ModalitiesTab() {
   };
   useEffect(() => { load(); }, []);
 
-  if (loading && !data) return <div className="empty"><p>Discovering modalities…</p></div>;
+  if (loading && !data) return <div className="panel"><SkelRows rows={5} label="Discovering modalities" /></div>;
   if (error) {
-    return <EmptyState icon={<IconAlert />} title="Couldn't discover modalities">{error}</EmptyState>;
+    return <div className="panel"><ErrorState title="Couldn't discover modalities" error={error} onRetry={load} /></div>;
   }
   if (!data) return null;
 
@@ -375,59 +405,31 @@ export function ModelsPage() {
 
   return (
     <div className="container">
-      <div className="page-head">
-        <div className="grow">
-          <h1 className="page-title">Models &amp; agents</h1>
-          <p className="page-sub">
-            Everything the hub can route, addressed as{" "}
-            <code className="mono" style={{
-              background: "var(--accent-softer)",
-              color: "var(--accent-strong)",
-              padding: "1px 6px",
-              borderRadius: 4,
-            }}>provider/model</code>.{" "}
-            <strong className="mono tnum">{totalModels}</strong> chat models across{" "}
-            <strong>{providerCount}</strong> providers, plus coding agents and
-            specialised modalities.
-          </p>
-        </div>
-        <button className="btn" onClick={load}>
-          <IconRefresh style={{ width: 14, height: 14 }} />Refresh
-        </button>
-      </div>
+      <PageHead
+        title="Models and agents" docTitle="Models"
+        sub={<>Everything the hub can route, addressed as <code className="mono">provider/model</code>. <strong className="mono tnum">{totalModels}</strong> chat models across <strong>{providerCount}</strong> providers, plus coding agents and other modalities.</>}
+      >
+        <button type="button" className="btn" onClick={load}><IconRefresh />Refresh</button>
+      </PageHead>
 
       <div className="row mb24" style={{ gap: 10 }}>
-        <div className="seg">
-          <button
-            className={tab === "models" ? "on" : ""}
-            onClick={() => setTab("models")}
-          >
-            <IconGrid />Chat models
-          </button>
-          <button
-            className={tab === "agents" ? "on" : ""}
-            onClick={() => setTab("agents")}
-          >
-            <IconTerminal />Coding agents
-          </button>
-          <button
-            className={tab === "modalities" ? "on" : ""}
-            onClick={() => setTab("modalities")}
-          >
-            <IconLayers />Other modalities
-          </button>
+        <div className="seg" role="radiogroup" aria-label="Catalog">
+          <button type="button" role="radio" aria-checked={tab === "models"} className={tab === "models" ? "on" : ""} onClick={() => setTab("models")}><IconGrid />Chat models</button>
+          <button type="button" role="radio" aria-checked={tab === "agents"} className={tab === "agents" ? "on" : ""} onClick={() => setTab("agents")}><IconTerminal />Coding agents</button>
+          <button type="button" role="radio" aria-checked={tab === "modalities"} className={tab === "modalities" ? "on" : ""} onClick={() => setTab("modalities")}><IconLayers />Other modalities</button>
         </div>
       </div>
 
       {tab === "models" && (
         <>
+          {data && data.groups.length > 0 && <CatalogReadouts data={data} />}
           <RoutingExplain />
 
           <div className="toolbar mb16">
             <div className="search">
               <IconSearch />
               <input
-                placeholder="Search by route or name…  e.g. openai/gpt-4o, claude, ollama"
+                placeholder="Search models"
                 value={query}
                 onChange={e => setQuery(e.target.value)}
                 aria-label="Search models"
@@ -440,23 +442,7 @@ export function ModelsPage() {
             )}
           </div>
 
-          {error && (
-            <div className="discovery-fail mb16" role="alert" style={{
-              borderRadius: "var(--r-md)",
-              border: "1px solid var(--warn)",
-              background: "var(--warn-soft)",
-            }}>
-              <IconAlert />
-              <div>
-                <strong>Couldn't list models.</strong> {error}
-                <div className="mt8">
-                  <button className="btn btn-sm" onClick={load}>
-                    <IconRefresh style={{ width: 13, height: 13 }} />Retry
-                  </button>
-                </div>
-              </div>
-            </div>
-          )}
+          {error && !data && <div className="panel mb16"><ErrorState title="Couldn't list models" error={error} onRetry={load} /></div>}
 
           <ModelsTab data={data} loading={loading} query={query} onPick={setPicked} />
         </>

@@ -1,0 +1,130 @@
+/* Tokens: Calibrated. Palette roles are documented in frontend/DESIGN.md. */
+
+@font-face {
+  font-family: 'Schibsted Grotesk';
+  src: url('../fonts/schibsted-grotesk-latin.woff2') format('woff2');
+  font-weight: 400 800; font-style: normal; font-display: swap;
+}
+@font-face {
+  font-family: 'Geist Mono';
+  src: url('../fonts/geist-mono-latin.woff2') format('woff2');
+  font-weight: 400 700; font-style: normal; font-display: swap;
+}
+/* Metric-matched fallbacks keep the font swap from shifting layout. */
+@font-face { font-family: 'Schibsted Fallback'; src: local('Arial'); size-adjust: 101%; ascent-override: 94%; descent-override: 24%; line-gap-override: 0%; }
+@font-face { font-family: 'Geist Mono Fallback'; src: local('Courier New'); size-adjust: 100%; ascent-override: 92%; descent-override: 26%; line-gap-override: 0%; }
+
+:root {
+  --font-ui: 'Schibsted Grotesk', 'Schibsted Fallback', ui-sans-serif, system-ui, -apple-system, 'Segoe UI', sans-serif;
+  --font-mono: 'Geist Mono', 'Geist Mono Fallback', ui-monospace, 'SF Mono', Menlo, Consolas, monospace;
+
+  --t-cap: 11px;
+  --t-xs: 12px;
+  --t-sm: 13px;
+  --t-md: 14px;
+  --t-lg: 16px;
+  --t-xl: 20px;
+  --t-title: clamp(26px, 1.4rem + 0.9vw, 34px);
+  --t-readout: clamp(30px, 1.6rem + 1.2vw, 44px);
+  --t-2xs: var(--t-cap);
+  --t-figure: var(--t-readout);
+
+  --s-1: 4px; --s-2: 8px; --s-3: 12px; --s-4: 16px; --s-5: 24px; --s-6: 32px; --s-7: 48px; --s-8: 64px;
+
+  --settle: cubic-bezier(0.22, 1.2, 0.36, 1);
+  --glide: cubic-bezier(0.2, 0.8, 0.2, 1);
+  --ease: var(--glide);
+  --dur-press: 120ms;
+  --dur-1: 160ms;
+  --dur-2: 320ms;
+  --dur-enter: 420ms;
+  --dur-draw: 700ms;
+
+  --bar-h: 52px;
+  --row-h: 44px;
+  --density: 1;
+
+  --r: 6px;
+  --r-lg: 10px;
+  --r-sm: var(--r); --r-md: var(--r); --r-xl: var(--r-lg);
+
+  --accent-h: 155;
+  color-scheme: light;
+
+  --ground: oklch(0.968 0.003 255);
+  --panel: oklch(0.996 0.001 255);
+  --sunk: oklch(0.945 0.004 255);
+  --ink: oklch(0.2 0.015 260);
+  --ink-2: oklch(0.38 0.015 260);
+  --ink-3: oklch(0.43 0.014 260);
+  --line: oklch(0.9 0.004 255);
+  --line-2: oklch(0.8 0.006 255);
+  --tick: oklch(0.74 0.008 255);
+
+  --accent: oklch(0.58 0.15 var(--accent-h));
+  --accent-ink: oklch(0.45 0.13 var(--accent-h));
+  --accent-wash: oklch(0.95 0.04 var(--accent-h));
+  --accent-ring: oklch(0.58 0.15 var(--accent-h) / 0.38);
+  --on-accent: oklch(0.99 0.01 var(--accent-h));
+  --accent-btn: oklch(0.5 0.14 var(--accent-h));
+  --accent-btn-hover: oklch(0.45 0.14 var(--accent-h));
+
+  --amber: oklch(0.62 0.14 65);
+  --amber-ink: oklch(0.47 0.11 60);
+  --amber-wash: oklch(0.96 0.04 85);
+  --red: oklch(0.56 0.2 25);
+  --red-ink: oklch(0.49 0.19 25);
+  --red-wash: oklch(0.96 0.03 25);
+  --blue-ink: oklch(0.48 0.14 255);
+
+  --shadow-float: 0 1px 2px oklch(0.2 0.02 255 / 0.08), 0 10px 28px oklch(0.2 0.02 255 / 0.14);
+  --shadow-pop: 0 24px 64px oklch(0.15 0.02 255 / 0.3);
+  --scrim: oklch(0.18 0.02 255 / 0.42);
+
+  /* legacy aliases: components not yet migrated read these names */
+  --canvas: var(--ground); --canvas-2: var(--sunk);
+  --surface: var(--panel); --surface-2: var(--sunk);
+  --border: var(--line); --border-strong: var(--line-2);
+  --text: var(--ink); --text-2: var(--ink-2); --text-3: var(--ink-3); --text-faint: var(--ink-3);
+  --accent-strong: var(--accent-ink); --accent-soft: var(--accent-wash); --accent-softer: var(--accent-wash);
+  --danger: var(--red-ink); --danger-soft: var(--red-wash);
+  --warn: var(--amber-ink); --warn-soft: var(--amber-wash);
+  --info: var(--blue-ink);
+  --vault: var(--ink-2); --vault-soft: var(--sunk); --vault-border: var(--line);
+  --shadow-sm: none; --shadow-md: var(--shadow-float); --shadow-lg: var(--shadow-float);
+}
+
+[data-theme="dark"] {
+  color-scheme: dark;
+  --ground: oklch(0.145 0.008 255);
+  --panel: oklch(0.19 0.009 255);
+  --sunk: oklch(0.16 0.008 255);
+  --ink: oklch(0.96 0.004 255);
+  --ink-2: oklch(0.82 0.008 255);
+  --ink-3: oklch(0.72 0.01 255);
+  --line: oklch(0.28 0.01 255);
+  --line-2: oklch(0.38 0.012 255);
+  --tick: oklch(0.42 0.012 255);
+
+  --accent: oklch(0.78 0.15 var(--accent-h));
+  --accent-ink: oklch(0.84 0.12 var(--accent-h));
+  --accent-wash: oklch(0.27 0.05 var(--accent-h));
+  --accent-ring: oklch(0.78 0.15 var(--accent-h) / 0.45);
+  --on-accent: oklch(0.16 0.02 var(--accent-h));
+  --accent-btn: oklch(0.78 0.15 var(--accent-h));
+  --accent-btn-hover: oklch(0.84 0.14 var(--accent-h));
+
+  --amber: oklch(0.8 0.15 80);
+  --amber-ink: oklch(0.84 0.13 80);
+  --amber-wash: oklch(0.29 0.05 80);
+  --red: oklch(0.72 0.17 25);
+  --red-ink: oklch(0.78 0.14 25);
+  --red-wash: oklch(0.29 0.06 25);
+  --blue-ink: oklch(0.78 0.11 255);
+
+  --shadow-float: 0 1px 2px oklch(0 0 0 / 0.4), 0 12px 32px oklch(0 0 0 / 0.5);
+  --shadow-pop: 0 24px 64px oklch(0 0 0 / 0.65);
+  --scrim: oklch(0.05 0.01 255 / 0.62);
+}
+
+[data-density="compact"] { --row-h: 34px; --density: 0.82; }

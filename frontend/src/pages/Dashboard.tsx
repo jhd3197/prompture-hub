@@ -1,183 +1,179 @@
-import { useEffect, useState } from "react";
+import { useMemo } from "react";
 import { Link } from "react-router-dom";
 import { api } from "../api";
 import { EmptyState } from "../components/EmptyState";
-import { EndpointTag } from "../components/EndpointTag";
-import { StatCard } from "../components/StatCard";
+import { ErrorState } from "../components/ErrorState";
+import { Meter } from "../components/charts/Meter";
+import { Sparkline } from "../components/charts/Sparkline";
+import { Num } from "../components/Num";
+import { PageHead } from "../components/PageHead";
+import { SkelReadouts, SkelRows } from "../components/Skeleton";
 import { TrustFlow } from "../components/TrustFlow";
-import {
-  IconActivity, IconAlert, IconCheck, IconChevronRight,
-  IconDollar, IconKey, IconPlus,
-} from "../icons";
-import type { CurrentUser, Overview } from "../types";
+import { IconActivity, IconAlert, IconCheck, IconDollar, IconKey, IconPlus } from "../icons";
+import { dateTime, int, ms, pct, plural, timeAgo, usd } from "../util/format";
+import { useAsync, useRowNav } from "../util/hooks";
+import { projectedSpend, useKeySpend } from "../util/keySpend";
+import type { CurrentUser, UsageRow } from "../types";
 
-function timeAgo(iso: string): string {
-  const d = new Date(iso);
-  const sec = Math.floor((Date.now() - d.getTime()) / 1000);
-  if (sec < 60) return `${sec}s ago`;
-  if (sec < 3600) return `${Math.floor(sec / 60)}m ago`;
-  if (sec < 86400) return `${Math.floor(sec / 3600)}h ago`;
-  return d.toLocaleDateString();
+function StatusChip({ status }: { status: string }) {
+  if (status === "ok") return <span className="chip chip-ok"><IconCheck />ok</span>;
+  const soft = status === "rate_limited" || status === "quota_exceeded";
+  return <span className={`chip ${soft ? "chip-warn" : "chip-bad"}`}><IconAlert />{status}</span>;
+}
+
+function ActivityTable({ rows }: { rows: UsageRow[] }) {
+  const { tbodyProps, rowProps } = useRowNav();
+  const slowest = Math.max(...rows.map(r => r.latency_ms), 1);
+  return (
+    <div className="table-wrap">
+      <table className="tbl cards cols3">
+        <caption className="sr-only">Most recent metered calls, newest first</caption>
+        <thead>
+          <tr>
+            <th scope="col">Model</th>
+            <th scope="col">Endpoint</th>
+            <th scope="col" className="num">Tokens</th>
+            <th scope="col" className="num">Cost</th>
+            <th scope="col">Latency</th>
+            <th scope="col">Status</th>
+            <th scope="col" className="num">When</th>
+          </tr>
+        </thead>
+        <tbody {...tbodyProps}>
+          {rows.map((u, i) => (
+            <tr key={u.id} {...rowProps(i)}>
+              <td className="td-primary">
+                <span className="cell-main cell-id cell-trunc" title={u.model}>{u.model}</span>
+                {u.served_by && u.served_by !== u.model && <span className="cell-sub cell-trunc" title={`Served by ${u.served_by}`}>via {u.served_by}</span>}
+              </td>
+              <td data-label="Endpoint" className="cell-id nowrap">{u.endpoint.replace("/v1", "")}</td>
+              <td data-label="Tokens" className="num cell-id">{int(u.total_tokens)}</td>
+              <td data-label="Cost" className="num cell-id cost-pos">{usd(u.cost_usd)}</td>
+              <td data-label="Latency" className="cell-id nowrap">
+                <span className="row" style={{ gap: 8 }}>
+                  <span className="b-track" style={{ width: 56, height: 4, background: "var(--sunk)", position: "relative", overflow: "hidden", borderRadius: 2 }} aria-hidden="true">
+                    <span className="b-fill alt" style={{ ["--p" as string]: u.latency_ms / slowest }} />
+                  </span>
+                  <span style={{ minWidth: 52, textAlign: "right" }}>{ms(u.latency_ms)}</span>
+                </span>
+              </td>
+              <td data-label="Status"><StatusChip status={u.status} /></td>
+              <td data-label="When" className="num nowrap faint" title={dateTime(u.timestamp)}>{timeAgo(u.timestamp)}</td>
+            </tr>
+          ))}
+        </tbody>
+      </table>
+    </div>
+  );
 }
 
 export function Dashboard({ user }: { user: CurrentUser }) {
-  const [data, setData] = useState<Overview | null>(null);
-  const [error, setError] = useState<string | null>(null);
+  const ov = useAsync(() => api.overview(), []);
+  const week = useAsync(() => api.analytics(7), []);
+  const data = ov.data;
+  const spend = useKeySpend(data?.recent_keys ?? null);
 
-  useEffect(() => {
-    api.overview()
-      .then(setData)
-      .catch(e => setError(String(e)));
-  }, []);
+  const keyRows = useMemo(() => {
+    if (!data) return [];
+    return data.recent_keys.filter(k => k.active)
+      .map(k => {
+        const used = spend.data?.get(k.id) ?? 0;
+        return { k, used, f: k.spend_cap_usd > 0 ? used / k.spend_cap_usd : 0 };
+      })
+      .sort((a, b) => b.f - a.f || a.k.name.localeCompare(b.k.name))
+      .slice(0, 5);
+  }, [data, spend.data]);
 
-  if (error) {
-    return (
-      <div className="container">
-        <EmptyState icon={<IconAlert />} title="Couldn't load overview">{error}</EmptyState>
-      </div>
-    );
-  }
-
-  const stats = data ?? {
-    spend_24h: 0, active_key_count: 0, total_call_count: 0,
-    recent_usage: [], recent_keys: [],
-  };
+  const days = week.data?.by_day ?? [];
+  const t = week.data?.totals;
 
   return (
     <div className="container">
-      <div className="page-head">
-        <div className="grow">
-          <h1 className="page-title">Overview</h1>
-          <p className="page-sub">
-            Live, metered traffic for <strong>{user.email}</strong> over the last 24 hours.
-          </p>
+      <PageHead title="Overview" docTitle="Overview" sub={<>Metered traffic for <strong>{user.email}</strong>. Figures update when you reload.</>}>
+        <Link to="/keys/new" className="btn btn-primary"><IconPlus />New hub key</Link>
+      </PageHead>
+
+      {ov.error ? (
+        <div className="panel"><ErrorState title="Couldn't load the overview" error={ov.error} onRetry={ov.reload} /></div>
+      ) : !data ? (
+        <div className="stack" aria-busy="true">
+          <SkelReadouts n={3} />
+          <div className="panel"><SkelRows rows={6} label="Loading recent activity" /></div>
         </div>
-        <Link to="/keys" className="btn btn-primary"><IconPlus />New hub key</Link>
-      </div>
-
-      <div className="stat-grid mb24">
-        <StatCard
-          icon={<IconDollar />}
-          label="Spend · last 24h"
-          value={<>$<span>{stats.spend_24h.toFixed(4)}</span></>}
-          meta={<span>across {stats.recent_usage.length} metered call{stats.recent_usage.length !== 1 ? "s" : ""}</span>}
-        />
-        <StatCard
-          icon={<IconKey />}
-          label="Active hub keys"
-          value={stats.active_key_count}
-          meta={<Link to="/keys" style={{ color: "var(--accent-strong)", fontWeight: 600 }}>manage →</Link>}
-        />
-        <StatCard
-          icon={<IconActivity />}
-          label="Recent calls"
-          value={stats.recent_usage.length}
-          meta="newest first · live feed"
-        />
-      </div>
-
-      <div className="mb24">
-        <div className="row between" style={{ marginBottom: 12 }}>
-          <h2 className="section-title">What a hub key protects</h2>
-          <Link to="/keys" className="row" style={{
-            gap: 4, color: "var(--text-3)", fontSize: 12.5, fontWeight: 600,
-          }}>
-            Manage keys <IconChevronRight style={{ width: 14, height: 14 }} />
-          </Link>
-        </div>
-        <TrustFlow activeKeys={stats.active_key_count} />
-      </div>
-
-      <div className="grid-dash">
-        <div className="card">
-          <div className="card-head">
-            <h3>Recent activity</h3>
-            <span className="sub">metered calls</span>
-          </div>
-          <div className="table-wrap">
-            {stats.recent_usage.length === 0 ? (
-              <EmptyState icon={<IconActivity />} title="No calls yet">
-                Once a hub key calls <code className="mono">/v1/*</code>, it'll show up here with model, tokens, cost and latency.
-              </EmptyState>
-            ) : (
-              <table className="tbl">
-                <thead>
-                  <tr>
-                    <th>Model</th>
-                    <th>Endpoint</th>
-                    <th className="num">Tokens</th>
-                    <th className="num">Cost</th>
-                    <th className="num">Latency</th>
-                    <th>Status</th>
-                    <th>When</th>
-                  </tr>
-                </thead>
-                <tbody>
-                  {stats.recent_usage.map(u => (
-                    <tr key={u.id}>
-                      <td className="strong mono" style={{ fontSize: 12.5 }}>{u.model}</td>
-                      <td><EndpointTag endpoint={u.endpoint} /></td>
-                      <td className="num mono tnum faint">{u.total_tokens.toLocaleString()}</td>
-                      <td className="num mono tnum cost-pos">${u.cost_usd.toFixed(4)}</td>
-                      <td className="num mono tnum lat-ok">{u.latency_ms}ms</td>
-                      <td>
-                        {u.status === "ok" ? (
-                          <span className="status-ok row" style={{ gap: 5, fontWeight: 600, fontSize: 12.5 }}>
-                            <IconCheck style={{ width: 13, height: 13 }} />ok
-                          </span>
-                        ) : (
-                          <span className="status-err row" style={{ gap: 5, fontWeight: 600, fontSize: 12.5 }}>
-                            <IconAlert style={{ width: 13, height: 13 }} />{u.status}
-                          </span>
-                        )}
-                      </td>
-                      <td className="faint" style={{ whiteSpace: "nowrap", fontSize: 12.5 }}>
-                        {timeAgo(u.timestamp)}
-                      </td>
-                    </tr>
-                  ))}
-                </tbody>
-              </table>
-            )}
-          </div>
-        </div>
-
-        <div className="card card-pad">
-          <div className="row between" style={{ marginBottom: 6 }}>
-            <h3 style={{ margin: 0, fontSize: 14, fontWeight: 700 }}>Your hub keys</h3>
-            <Link to="/keys" className="faint" style={{ fontSize: 12.5, fontWeight: 600 }}>View all</Link>
-          </div>
-          {stats.recent_keys.length === 0 ? (
-            <EmptyState icon={<IconKey />} title="No hub keys yet">
-              Create a scoped <code className="mono">ph_…</code> key to start metering traffic.
-            </EmptyState>
-          ) : (
-            <div className="keylist">
-              {stats.recent_keys.slice(0, 6).map(k => (
-                <div className="keylist-item" key={k.id}>
-                  <span className={`kdot ${k.active ? "live" : "dead"}`}></span>
-                  <div className="grow" style={{ minWidth: 0 }}>
-                    <div className="row" style={{ gap: 8 }}>
-                      <span className="strong" style={{ fontWeight: 600, fontSize: 13 }}>{k.name}</span>
-                    </div>
-                    <div className="mono faint" style={{ fontSize: 11.5, marginTop: 1 }}>
-                      {k.allowed_models.length} model{k.allowed_models.length !== 1 ? "s" : ""}
-                      {k.allowed_models.length === 0 && " · any"}
-                    </div>
-                  </div>
-                  <div className="right">
-                    <div className="mono tnum" style={{ fontSize: 12.5, fontWeight: 600 }}>
-                      ${k.daily_spend_cap_usd.toFixed(2)}
-                    </div>
-                    <div className="faint" style={{ fontSize: 11 }}>cap / {k.spend_period}</div>
-                  </div>
-                </div>
-              ))}
+      ) : (
+        <div className="stack">
+          <div className="readouts rise" style={{ ["--cols" as string]: "minmax(0, 1.4fr) minmax(0, 1fr) minmax(0, 1fr)" }}>
+            <div className="readout is-hero span-all">
+              <span className="caption readout-label"><IconDollar />Spend, last 24 hours</span>
+              <div className="readout-value"><span className="cur">$</span><Num value={data.spend_24h} format={v => v.toFixed(v < 1 ? 4 : 2)} /></div>
+              <div className="readout-meta">{plural(data.recent_usage.length, "metered call")} in the feed below</div>
+              {days.length > 1 && <Sparkline values={days.map(d => d.cost_usd)} label="Spend per day, last 7 days" />}
             </div>
-          )}
-          <Link to="/keys" className="btn btn-block mt16"><IconPlus />Create a key</Link>
+            <div className="readout">
+              <span className="caption readout-label"><IconKey />Active hub keys</span>
+              <div className="readout-value"><Num value={Math.max(data.active_key_count, data.recent_keys.filter(k => k.active).length)} format={v => String(Math.round(v))} /></div>
+              <div className="readout-meta">
+                {keyRows[0] && keyRows[0].f >= 0.7
+                  ? <span className={keyRows[0].f >= 0.9 ? "status-err" : "status-warn"}>{keyRows[0].k.name} is at {Math.round(keyRows[0].f * 100)}% of its cap</span>
+                  : <Link to="/keys">Manage keys</Link>}
+              </div>
+            </div>
+            <div className="readout">
+              <span className="caption readout-label"><IconActivity />Calls, 7 days</span>
+              <div className="readout-value">{t ? <Num value={t.requests} format={v => int(Math.round(v))} /> : <span className="faint">n/a</span>}</div>
+              <div className="readout-meta">{t ? <>{pct(t.error_rate)} errors, p95 {ms(t.p95_latency_ms)}</> : "Analytics unavailable"}</div>
+              {days.length > 1 && <Sparkline values={days.map(d => d.requests)} label="Requests per day, last 7 days" />}
+            </div>
+          </div>
+
+          <div className="cols cols-8-4">
+            <section className="panel rise" style={{ ["--i" as string]: 1 }} aria-labelledby="near-cap">
+              <div className="panel-head">
+                <h2 id="near-cap">Keys closest to their cap</h2>
+                <span className="sub">cap window to date</span>
+                <div className="push"><Link to="/keys" className="btn btn-sm btn-ghost">All keys</Link></div>
+              </div>
+              {keyRows.length === 0 ? (
+                <EmptyState icon={<IconKey />} title="No active keys yet" action={<Link to="/keys/new" className="btn btn-primary"><IconPlus />Create a key</Link>}>
+                  A hub key is a scoped <code className="mono">ph_</code> credential. Once one exists, its spend against its cap shows here.
+                </EmptyState>
+              ) : (
+                <ul className="bars" aria-label="Spend against cap per key" style={{ padding: 0 }}>
+                  {keyRows.map(({ k, used }) => (
+                    <li key={k.id} style={{ gridTemplateColumns: "minmax(0, 0.9fr) minmax(0, 2fr)", alignItems: "center", padding: "12px 16px" }}>
+                      <span className="b-name truncate">
+                        <Link to={`/keys?key=${k.id}`} className="strong" style={{ textDecoration: "underline", textDecorationColor: "var(--line-2)", textUnderlineOffset: 3 }}>{k.name}</Link>
+                        <small>{k.paused ? "paused, " : ""}per {k.spend_period}</small>
+                      </span>
+                      {spend.loading && !spend.data ? <span className="skel" style={{ height: 8 }} aria-hidden="true" /> : (
+                        <Meter used={used} cap={k.spend_cap_usd} projected={projectedSpend(used, k.spend_period)} label={`${k.name} spend against its ${k.spend_period} cap`} />
+                      )}
+                    </li>
+                  ))}
+                </ul>
+              )}
+              <div className="tbl-foot">Notches mark 70% and 90%. A dotted tick shows where the current pace lands by the reset. Spend excludes manual adjustments.</div>
+            </section>
+            <section className="rise" style={{ ["--i" as string]: 2 }} aria-labelledby="protects">
+              <h2 className="caption" id="protects" style={{ marginBottom: 10 }}>What a hub key protects</h2>
+              <TrustFlow activeKeys={Math.max(data.active_key_count, data.recent_keys.filter(k => k.active).length)} stacked />
+            </section>
+          </div>
+
+          <section className="panel rise" style={{ ["--i" as string]: 3 }} aria-labelledby="activity">
+            <div className="panel-head">
+              <h2 id="activity">Recent activity</h2>
+              <span className="sub">{data.recent_usage.length} newest calls</span>
+              <div className="push"><Link to="/analytics" className="btn btn-sm btn-ghost">Analytics</Link></div>
+            </div>
+            {data.recent_usage.length === 0 ? (
+              <EmptyState icon={<IconActivity />} title="No calls yet" action={<Link to="/keys" className="btn">Open keys</Link>}>
+                Once a hub key calls <code className="mono">/v1/*</code>, each request lands here with its model, tokens, cost and latency.
+              </EmptyState>
+            ) : <ActivityTable rows={data.recent_usage} />}
+          </section>
         </div>
-      </div>
+      )}
     </div>
   );
 }
