@@ -23,7 +23,7 @@ export function Meter({
   const tone: MeterTone = hasCap ? toneFor(f) : "none";
   const shown = Math.min(1, f);
   const proj = hasCap && projected != null ? Math.min(1, projected / cap) : null;
-  const pctText = hasCap ? `${Math.round(f * 100)}%` : "no cap";
+  const pctText = hasCap ? (f > 0 && f < 0.01 ? "<1%" : `${Math.round(f * 100)}%`) : "no cap";
   const text = hasCap ? `${usd(used)} of ${usd(cap, 2)}, ${pctText} used` : `${usd(used)} used, no cap`;
   return (
     <div className="meter-wrap">
