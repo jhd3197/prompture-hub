@@ -10,6 +10,8 @@ import "./styles/data.css";
 import "./styles/pages.css";
 import "./styles/home.css";
 import "./styles/sessions.css";
+import "./styles/login.css";
+import "./styles/settings.css";
 
 createRoot(document.getElementById("root")!).render(
   <StrictMode>

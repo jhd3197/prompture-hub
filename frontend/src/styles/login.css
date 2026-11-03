@@ -1,0 +1,31 @@
+/* Login: a dark instrument panel beside a quiet sign-in. The aside carries data-theme="dark" so tokens stay dark in both themes. */
+.login-wrap { min-height: 100vh; display: grid; grid-template-columns: minmax(0, 1.05fr) minmax(0, 0.95fr); background: var(--ground); }
+.login-aside {
+  position: relative; display: flex; flex-direction: column; justify-content: center; gap: 28px; padding: clamp(32px, 5vw, 72px);
+  background: var(--ground); color: var(--ink); border-right: 1px solid var(--line);
+}
+.login-aside::before { /* the scale runs down the right edge */
+  content: ""; position: absolute; top: 0; bottom: 0; right: 0; width: 12px; pointer-events: none;
+  background:
+    repeating-linear-gradient(0deg, var(--ink-3) 0 1px, transparent 1px 64px) 100% 0 / 12px 100% no-repeat,
+    repeating-linear-gradient(0deg, var(--tick) 0 1px, transparent 1px 8px) 100% 0 / 6px 100% no-repeat;
+}
+.login-aside > * { position: relative; max-width: 560px; }
+.login-display { font-size: clamp(34px, 3vw + 12px, 54px); font-weight: 800; letter-spacing: -0.05em; line-height: 1.02; margin: 0; max-width: 14ch; text-wrap: balance; }
+.login-copy { color: var(--ink-2); font-size: var(--t-lg); line-height: 1.55; margin: 16px 0 0; max-width: 46ch; }
+.login-facts { list-style: none; margin: 0; padding: 0; display: flex; flex-wrap: wrap; gap: 8px 20px; font-size: var(--t-sm); color: var(--ink-2); }
+.login-facts li { display: inline-flex; align-items: center; gap: 6px; }
+.login-facts svg { width: 14px; height: 14px; color: var(--accent-ink); }
+.login-main { position: relative; display: grid; place-items: center; padding: 40px 24px; }
+.login-theme { position: absolute; top: 16px; right: 16px; }
+.login-card { width: 100%; max-width: 400px; }
+.login-title { font-size: 28px; font-weight: 800; letter-spacing: -0.04em; line-height: 1.1; }
+.login-sub { color: var(--ink-2); margin: 8px 0 0; font-size: var(--t-sm); }
+.login-actions { display: flex; flex-direction: column; gap: 10px; margin-top: 22px; }
+.login-brand-mobile { display: none; margin-bottom: 28px; }
+@media (max-width: 900px) {
+  .login-wrap { grid-template-columns: minmax(0, 1fr); }
+  .login-aside { display: none; }
+  .login-brand-mobile { display: block; }
+  .login-main { align-items: start; padding-top: 72px; }
+}

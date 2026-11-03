@@ -1,5 +1,8 @@
 import { useEffect, useState } from "react";
 import { api } from "../../api";
+import { Sparkline } from "../../components/charts/Sparkline";
+import { ErrorState } from "../../components/ErrorState";
+import { SkelRows } from "../../components/Skeleton";
 import { EmptyState } from "../../components/EmptyState";
 import { useToast } from "../../components/Toast";
 import { IconPlus, IconRefresh, IconRoute, IconTrash } from "../../icons";
@@ -46,7 +49,7 @@ function EndpointRow({ ep, onChanged }: { ep: CustomEndpoint; onChanged: () => v
 
   return (
     <tr>
-      <td>
+      <td className="td-primary">
         <div className="strong" style={{ fontWeight: 600 }}>{ep.name}</div>
         <div className="mono faint" style={{ fontSize: 11.5 }}>{ep.base_url}</div>
       </td>
@@ -56,10 +59,15 @@ function EndpointRow({ ep, onChanged }: { ep: CustomEndpoint; onChanged: () => v
           : <span className="badge">not checked</span>}
       </td>
       <td className="faint" style={{ fontSize: 12.5 }}>
-        {ep.models.length ? `${ep.models.length} models` : "—"}
+        {ep.models.length ? `${ep.models.length} models` : "none"}
       </td>
       <td className="num mono tnum" style={{ fontSize: 12.5 }}>
-        {usage ? `${usage.totals.requests} calls · ${usd(usage.totals.cost_usd)}` : "—"}
+        {usage ? (
+          <span style={{ display: "inline-flex", alignItems: "center", gap: 10 }}>
+            <span style={{ width: 72 }}><Sparkline values={usage.by_day.map(d => d.requests)} label={`${ep.name} requests per day, last 7 days`} /></span>
+            <span>{usage.totals.requests} calls · {usd(usage.totals.cost_usd)}</span>
+          </span>
+        ) : "no data"}
       </td>
       <td className="num">
         <div className="row" style={{ gap: 6, justifyContent: "flex-end" }}>
@@ -79,12 +87,14 @@ export function EndpointsSettings() {
   const [name, setName] = useState("");
   const [baseUrl, setBaseUrl] = useState("");
   const [keyEnv, setKeyEnv] = useState("");
+  const [loadErr, setLoadErr] = useState<string | null>(null);
 
   const load = async () => {
     try {
       setItems(await api.endpoints());
+      setLoadErr(null);
     } catch (e) {
-      toast(`Couldn't load endpoints: ${e}`);
+      setLoadErr(String(e));
     }
   };
   // eslint-disable-next-line react-hooks/exhaustive-deps
@@ -106,8 +116,10 @@ export function EndpointsSettings() {
     <div style={{ display: "flex", flexDirection: "column", gap: 18 }}>
       <div className="card">
         <div className="card-head"><h3>Custom endpoints</h3><span className="sub">last 7 days</span></div>
-        {items === null ? (
-          <div className="empty"><p>Loading…</p></div>
+        {loadErr && items === null ? (
+          <ErrorState title="Couldn't load endpoints" error={loadErr} onRetry={load} />
+        ) : items === null ? (
+          <SkelRows rows={3} label="Loading endpoints" />
         ) : items.length === 0 ? (
           <EmptyState icon={<IconRoute />} title="No custom endpoints">
             Add any OpenAI-compatible server (vLLM, llama.cpp, a private gateway). Its models become{" "}
@@ -116,7 +128,8 @@ export function EndpointsSettings() {
         ) : (
           <div className="table-wrap">
             <table className="tbl">
-              <thead><tr><th>Endpoint</th><th>Health</th><th>Models</th><th className="num">Usage</th><th className="num">Action</th></tr></thead>
+              <caption className="sr-only">Custom endpoints</caption>
+              <thead><tr><th scope="col">Endpoint</th><th scope="col">Health</th><th scope="col">Models</th><th scope="col" className="num">Usage, 7 days</th><th scope="col" className="num"><span className="sr-only">Actions</span></th></tr></thead>
               <tbody>{items.map(ep => <EndpointRow key={ep.id} ep={ep} onChanged={load} />)}</tbody>
             </table>
           </div>

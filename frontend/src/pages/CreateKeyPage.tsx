@@ -92,7 +92,7 @@ export function CreateKeyPage() {
       toast(`Created ${created.name}`);
       // Hand the plaintext off to the /keys page via router state so it
       // can pop the one-time reveal banner. State is gone after the user
-      // navigates away — never in a URL.
+      // navigates away, never in a URL.
       navigate("/keys", { replace: true, state: { newKey: created } });
     } catch (e) {
       const msg = e instanceof ApiError

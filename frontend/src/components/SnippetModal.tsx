@@ -71,7 +71,7 @@ function build(route: string, kind: Kind): string {
 }
 
 // Single-pass tokenizer keyed by language. Sequential regex passes were
-// double-wrapping themselves — the string pass would emit `class="tok-str"`
+// double-wrapping themselves, the string pass would emit `class="tok-str"`
 // markup, and the keyword pass would then re-match the literal word
 // `class` inside it. One regex with alternation picks each token exactly
 // once and never sees its own output.
@@ -81,7 +81,7 @@ function highlight(code: string, kind: Kind): string {
 
   const escaped = escape(code);
 
-  // Shell snippets get only comments + strings — no Python keywords to
+  // Shell snippets get only comments + strings, no Python keywords to
   // mis-fire on, and the cURL flag list is too varied to color cleanly.
   if (kind === "curl") {
     const SHELL_RE = /(#[^\n]*)|("[^"]*"|'[^']*')/g;
@@ -114,7 +114,7 @@ export function SnippetModal({ route, onClose }: Props) {
       onClose={onClose}
       desc={
         <>
-          Call <code className="mono">{route}</code> with your hub key — the prefix routes the driver and the hub meters it.
+          Call <code className="mono">{route}</code> with your hub key, the prefix routes the driver and the hub meters it.
         </>
       }
       footer={<button className="btn btn-ghost" onClick={onClose}>Close</button>}

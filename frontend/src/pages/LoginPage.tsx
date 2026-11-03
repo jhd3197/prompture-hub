@@ -1,9 +1,9 @@
 import { useEffect, useState } from "react";
 import { Brand } from "../components/Brand";
 import { TrustFlow } from "../components/TrustFlow";
-import {
-  IconAlert, IconCheck, IconGitHub, IconGoogle, IconKey, IconMoon, IconSun,
-} from "../icons";
+import { Skel } from "../components/Skeleton";
+import { IconAlert, IconCheck, IconGitHub, IconGoogle, IconKey, IconMoon, IconSun } from "../icons";
+import { usePageTitle } from "../util/hooks";
 import { useTheme } from "../theme";
 import { api } from "../api";
 import type { AuthProviders } from "../types";
@@ -11,6 +11,7 @@ import type { AuthProviders } from "../types";
 export function LoginPage({ error }: { error?: string }) {
   const [providers, setProviders] = useState<AuthProviders | null>(null);
   const [theme, toggleTheme] = useTheme();
+  usePageTitle("Sign in");
 
   useEffect(() => {
     api.providers()
@@ -22,109 +23,63 @@ export function LoginPage({ error }: { error?: string }) {
 
   return (
     <div className="login-wrap">
-      <aside className="login-aside">
+      <aside className="login-aside" data-theme="dark" aria-label="About the hub">
         <Brand as="static" />
-
-        <div>
-          <h1 style={{
-            fontSize: 30, fontWeight: 800, letterSpacing: "-0.03em",
-            lineHeight: 1.12, margin: 0, maxWidth: "16ch",
-          }}>
-            One gateway in front of every model.
-          </h1>
-          <p style={{
-            color: "var(--text-2)", fontSize: 15, marginTop: 14,
-            maxWidth: "42ch", lineHeight: 1.55,
-          }}>
-            Hand your apps a scoped key with a model whitelist, a spend cap and a rate limit.
-            Keep the real provider keys here — server-side, never shipped.
+        <div className="login-lede">
+          <p className="login-display">One gateway in front of every model.</p>
+          <p className="login-copy">
+            Give each app a scoped key with a model allowlist, a spend cap and a rate limit.
+            The real provider keys stay on the server, and every call is metered.
           </p>
         </div>
-
-        <TrustFlow compact />
-
-        <div className="row wrap" style={{
-          gap: 20, marginTop: "auto", color: "var(--text-3)", fontSize: 12.5,
-        }}>
-          <span className="row" style={{ gap: 6 }}>
-            <IconCheck style={{ width: 14, height: 14, color: "var(--accent-strong)" }} />OpenAI-compatible API
-          </span>
-          <span className="row" style={{ gap: 6 }}>
-            <IconCheck style={{ width: 14, height: 14, color: "var(--accent-strong)" }} />Native <code className="mono">/v1/extract</code>
-          </span>
-          <span className="row" style={{ gap: 6 }}>
-            <IconCheck style={{ width: 14, height: 14, color: "var(--accent-strong)" }} />40+ providers
-          </span>
-        </div>
+        <TrustFlow compact stacked />
+        <ul className="login-facts">
+          <li><IconCheck />OpenAI-compatible API</li>
+          <li><IconCheck />Native <code className="mono">/v1/extract</code></li>
+          <li><IconCheck />Caps, rate limits and fallbacks per key</li>
+        </ul>
       </aside>
 
-      <main className="login-main" style={{ position: "relative" }}>
+      <main className="login-main" id="main">
         <button
-          className="icon-btn"
-          onClick={toggleTheme}
+          type="button" className="icon-btn login-theme" onClick={toggleTheme}
           aria-label={`Switch to ${theme === "dark" ? "light" : "dark"} theme`}
-          style={{ position: "absolute", top: 20, right: 20 }}
         >
           {theme === "dark" ? <IconSun /> : <IconMoon />}
         </button>
-        <div className="login-card fade-in">
-          <h2 style={{ fontSize: 22, fontWeight: 800, letterSpacing: "-0.02em", margin: 0 }}>
-            Sign in to the dashboard
-          </h2>
-          <p style={{ color: "var(--text-2)", marginTop: 8, fontSize: 13.5 }}>
-            For operators. Only allowlisted emails can access the console.
-          </p>
+        <div className="login-card rise">
+          <div className="login-brand-mobile"><Brand as="static" /></div>
+          <h1 className="login-title">Sign in to the dashboard</h1>
+          <p className="login-sub">For operators. Only allowlisted emails can open the console.</p>
 
           {!authConfigured && providers && (
-            <div className="discovery-fail" style={{
-              borderRadius: "var(--r-md)", marginTop: 18,
-            }} role="alert">
+            <div className="notice warn" role="alert" style={{ marginTop: 18 }}>
               <IconAlert />
               <span>
-                <strong>Login is not configured.</strong> Set <code className="mono">HUB_SESSION_SECRET</code> and at least one of <code className="mono">HUB_GOOGLE_CLIENT_ID</code> / <code className="mono">HUB_GITHUB_CLIENT_ID</code> in <code className="mono">.env</code>, then restart.
+                <strong>Login is not configured.</strong> Set <code className="mono">HUB_SESSION_SECRET</code> and at least one of <code className="mono">HUB_GOOGLE_CLIENT_ID</code> or <code className="mono">HUB_GITHUB_CLIENT_ID</code> in <code className="mono">.env</code>, then restart.
               </span>
             </div>
           )}
 
           {error && (
-            <div className="discovery-fail" style={{
-              borderRadius: "var(--r-md)",
-              border: "1px solid var(--danger)",
-              background: "var(--danger-soft)",
-              marginTop: 18,
-            }} role="alert">
-              <IconAlert style={{ color: "var(--danger)" }} />
+            <div className="notice bad" role="alert" style={{ marginTop: 18 }}>
+              <IconAlert />
               <span className="mono" style={{ wordBreak: "break-word" }}>{error}</span>
             </div>
           )}
 
-          <div style={{ display: "flex", flexDirection: "column", gap: 10, marginTop: 22 }}>
-            {providers?.google && (
-              <a href={api.loginHref("google")} className="btn btn-lg btn-block">
-                <IconGoogle /> Continue with Google
-              </a>
-            )}
-            {providers?.github && (
-              <a href={api.loginHref("github")} className="btn btn-lg btn-block">
-                <IconGitHub /> Continue with GitHub
-              </a>
-            )}
+          <div className="login-actions">
+            {!providers && <><Skel h={44} /><Skel h={44} /></>}
+            {providers?.google && <a href={api.loginHref("google")} className="btn btn-lg btn-block"><IconGoogle /> Continue with Google</a>}
+            {providers?.github && <a href={api.loginHref("github")} className="btn btn-lg btn-block"><IconGitHub /> Continue with GitHub</a>}
           </div>
 
-          <div style={{
-            marginTop: 22, padding: "13px 14px",
-            borderRadius: "var(--r-md)",
-            background: "var(--surface-2)", border: "1px solid var(--border)",
-            display: "flex", gap: 10, alignItems: "flex-start",
-          }}>
-            <IconKey style={{
-              width: 16, height: 16, color: "var(--text-3)",
-              flex: "none", marginTop: 2,
-            }} />
-            <p style={{ margin: 0, fontSize: 12.5, color: "var(--text-2)", lineHeight: 1.5 }}>
-              <strong style={{ color: "var(--text)" }}>Building an app?</strong> You don't sign in here.
-              Programmatic clients authenticate with a <strong style={{ color: "var(--text)" }}>hub API key</strong>
-              {" "}(<code className="mono">Authorization: Bearer ph_…</code>) created on the Keys page.
+          <div className="notice" style={{ marginTop: 22 }}>
+            <IconKey />
+            <p style={{ margin: 0 }}>
+              <strong style={{ color: "var(--ink)" }}>Building an app?</strong> You don't sign in here.
+              Programmatic clients send a hub key
+              {" "}(<code className="mono">Authorization: Bearer ph_...</code>) created on the Keys page.
             </p>
           </div>
         </div>

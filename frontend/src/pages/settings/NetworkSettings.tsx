@@ -1,6 +1,8 @@
 import { useEffect, useState } from "react";
 import { api } from "../../api";
 import { CopyButton } from "../../components/CopyButton";
+import { ErrorState } from "../../components/ErrorState";
+import { SkelRows } from "../../components/Skeleton";
 import { EmptyState } from "../../components/EmptyState";
 import {
   IconAlert, IconCheck, IconExternal, IconLock, IconRefresh,
@@ -19,7 +21,7 @@ function cloudflaredSnippet(port: number): string {
 curl -L https://github.com/cloudflare/cloudflared/releases/latest/download/cloudflared-linux-amd64 -o /usr/local/bin/cloudflared
 chmod +x /usr/local/bin/cloudflared
 
-# create a quick tunnel — no Cloudflare account needed
+# create a quick tunnel, no Cloudflare account needed
 cloudflared tunnel --url http://127.0.0.1:${port}`;
 }
 
@@ -68,9 +70,9 @@ export function NetworkSettings() {
   };
   useEffect(() => { load(); }, []);
 
-  if (loading && !info) return <div className="empty"><p>Detecting host…</p></div>;
+  if (loading && !info) return <div className="panel"><SkelRows rows={4} label="Detecting host" /></div>;
   if (error || !info) {
-    return <EmptyState icon={<IconAlert />} title="Couldn't read system info">{error || "no data"}</EmptyState>;
+    return <div className="panel"><ErrorState title="Couldn't read system info" error={error || "no data"} onRetry={load} /></div>;
   }
 
   const windowsNative = info.platform === "Windows" && !info.is_wsl;
@@ -117,7 +119,7 @@ export function NetworkSettings() {
         </dl>
       </div>
 
-      {/* Sharing advice — branches on platform. */}
+      {/* Sharing advice, branches on platform. */}
       <div className="card card-pad">
         <h2 className="section-title" style={{ marginBottom: 14 }}>Sharing on a network</h2>
 
@@ -132,7 +134,7 @@ export function NetworkSettings() {
               <code className="mono">0.0.0.0</code> works, but Windows Defender
               and the default Hyper-V networking make LAN sharing fiddly.
               Easiest path: run the hub <strong>inside WSL2</strong> (Ubuntu
-              etc.) — then it shows up on your LAN like any other Linux host.
+              etc.), then it shows up on your LAN like any other Linux host.
               <div className="mt8">
                 <CopyButton
                   text="wsl --install -d Ubuntu && wsl -d Ubuntu --exec bash -c 'curl -fsSL https://astral.sh/uv/install.sh | sh'"
@@ -221,7 +223,7 @@ export function NetworkSettings() {
         <h2 className="section-title" style={{ marginBottom: 14 }}>Internet sharing</h2>
         <p className="muted" style={{ margin: "0 0 14px", fontSize: 13 }}>
           For sharing beyond your LAN, use a tunnel. The hub doesn't manage
-          tunnels itself — we just detect what's installed and show you the
+          tunnels itself, we just detect what's installed and show you the
           setup.
         </p>
 

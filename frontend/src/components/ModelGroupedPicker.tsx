@@ -18,7 +18,7 @@ interface Props {
  * model list. Per-provider "select all" toggles every model under that
  * provider in or out, individual models have their own checkboxes.
  *
- * Empty selection means "any model" — see the caller's hint copy.
+ * Empty selection means "any model", see the caller's hint copy.
  */
 export function ModelGroupedPicker({ value, onChange }: Props) {
   const [groups, setGroups] = useState<ProviderGroup[]>([]);

@@ -13,7 +13,7 @@ interface Props {
  * - When ``iconUrl`` is set we render the simple-icons CDN SVG against a
  *   tinted brand-color background.
  * - If the image fails to load (CDN down, slug typo, network), we swap to
- *   the initials block — identical to the no-brand path.
+ *   the initials block, identical to the no-brand path.
  * - When ``iconUrl`` is null we go straight to initials.
  */
 export function ProviderLogo({
