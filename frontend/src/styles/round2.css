@@ -80,7 +80,7 @@
 .seg button:active { transform: scale(0.97); }
 
 /* ---------- numerals: punctuation in a mono figure takes a narrow cell ---------- */
-.pn { display: inline-block; width: 0.3em; margin-left: -0.04em; text-align: center; letter-spacing: 0; }
+.pn { display: inline-block; width: 0.3em; margin-left: -0.1em; text-align: left; text-indent: -0.15em; letter-spacing: 0; }
 
 /* ---------- gauges on analytics ---------- */
 .gauge { margin-top: 2px; }
