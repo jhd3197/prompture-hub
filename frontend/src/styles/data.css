@@ -1,9 +1,8 @@
 /* Data: readout strip, sparklines, meters, charts, bar lists, delta bars, tables. */
 
 /* ---------- readout strip ---------- */
-.readouts { display: grid; grid-template-columns: var(--cols, repeat(3, minmax(0, 1fr))); background: var(--panel); border: 1px solid var(--line); border-radius: var(--r); overflow: clip; }
-.readout { position: relative; min-width: 0; padding: 18px 20px 16px; display: flex; flex-direction: column; gap: 8px; }
-.readout + .readout { border-left: 1px solid var(--line); }
+.readouts { display: grid; grid-template-columns: var(--cols, repeat(3, minmax(0, 1fr))); gap: 1px; background: var(--line); border: 1px solid var(--line); border-radius: var(--r); overflow: clip; }
+.readout { position: relative; min-width: 0; padding: 18px 20px 16px; display: flex; flex-direction: column; gap: 8px; background: var(--panel); }
 .readout-label { display: flex; align-items: center; gap: 8px; }
 .readout-label svg { width: 14px; height: 14px; color: var(--ink-3); }
 .readout-value {
@@ -15,17 +14,16 @@
 .readout-meta { font-size: var(--t-xs); color: var(--ink-3); display: flex; align-items: center; gap: 6px; flex-wrap: wrap; min-height: 18px; }
 .readout-meta a { color: var(--accent-ink); font-weight: 620; }
 .readout-meta a:hover { text-decoration: underline; }
-.readout .spark { margin-top: 6px; }
+.readout .spark { margin-top: auto; padding-top: 6px; box-sizing: content-box; }
+.readout .gauge { margin-top: 2px; }
 .readout-warn .readout-value { color: var(--amber-ink); }
 .readout-bad .readout-value { color: var(--red-ink); }
 @media (max-width: 1000px) {
   .readouts { grid-template-columns: repeat(2, minmax(0, 1fr)); }
-  .readout { border-left: 0 !important; }
-  .readout:nth-child(even) { border-left: 1px solid var(--line) !important; }
-  .readout:nth-child(n+3) { border-top: 1px solid var(--line); }
-  .readout.span-all { grid-column: 1 / -1; border-left: 0 !important; }
+  .readout.span-all, .readout:last-child:nth-child(odd) { grid-column: 1 / -1; }
 }
 @media (max-width: 640px) {
+  .readouts { border-left: 0; border-right: 0; border-radius: 0; margin-left: calc(-1 * clamp(16px, 3vw, 40px)); margin-right: calc(-1 * clamp(16px, 3vw, 40px)); }
   .readout { padding: 14px 16px; }
   .readout-value { font-size: 28px; }
 }

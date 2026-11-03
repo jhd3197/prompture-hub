@@ -68,7 +68,7 @@
   transition: border-color var(--dur-1) var(--glide), box-shadow var(--dur-1) var(--glide);
 }
 .input:hover, .textarea:hover, select.input:hover { border-color: var(--ink-3); }
-.input::placeholder, .textarea::placeholder { color: var(--ink-3); opacity: 0.8; }
+.input::placeholder, .textarea::placeholder { color: var(--ink-3); opacity: 1; }
 .input:focus, .textarea:focus, select.input:focus { outline: none; border-color: var(--accent); box-shadow: 0 0 0 3px var(--accent-ring); }
 .input[aria-invalid="true"] { border-color: var(--red); }
 .input:disabled { background: var(--sunk); color: var(--ink-3); cursor: not-allowed; }
