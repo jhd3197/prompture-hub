@@ -2,11 +2,27 @@
 <html lang="en" data-theme="light">
   <head>
     <meta charset="UTF-8" />
-    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0, viewport-fit=cover" />
     <title>Prompture Hub</title>
-    <link rel="icon" type="image/svg+xml" href="data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 24 24' fill='none' stroke='%23198754' stroke-width='2' stroke-linecap='round' stroke-linejoin='round'%3E%3Cpath d='M12 2 2 7l10 5 10-5-10-5z'/%3E%3Cpath d='M2 17l10 5 10-5'/%3E%3Cpath d='M2 12l10 5 10-5'/%3E%3C/svg%3E" />
+    <meta name="description" content="Operator console for a Prompture Hub gateway: issue scoped hub keys with spend caps and rate limits, watch metered LLM traffic, and reconcile billing." />
+    <meta name="theme-color" content="#f4f5f7" />
+    <meta name="color-scheme" content="light dark" />
+    <meta property="og:type" content="website" />
+    <meta property="og:site_name" content="Prompture Hub" />
+    <meta property="og:title" content="Prompture Hub" />
+    <meta property="og:description" content="Scoped hub keys, spend caps, metered traffic and billing reconciliation for your LLM gateway." />
+    <meta property="og:image" content="/app/og.png" />
+    <meta property="og:image:width" content="1200" />
+    <meta property="og:image:height" content="630" />
+    <meta property="og:image:alt" content="Prompture Hub: scoped keys, spend caps and one gateway, with a cap meter marked at 70 and 90 percent." />
+    <meta name="twitter:card" content="summary_large_image" />
+    <meta name="twitter:title" content="Prompture Hub" />
+    <meta name="twitter:description" content="Scoped hub keys, spend caps, metered traffic and billing reconciliation for your LLM gateway." />
+    <meta name="twitter:image" content="/app/og.png" />
+    <link rel="icon" type="image/svg+xml" href="/app/favicon.svg" />
+    <link rel="apple-touch-icon" href="/app/og.png" />
     <script>
-      // Apply saved theme + accent hue before paint to avoid flash.
+      // Apply saved theme + accent hue before paint to avoid a flash.
       (function () {
         try {
           var savedTheme = localStorage.getItem("ph-theme");
@@ -19,12 +35,27 @@
           if (Number.isFinite(hue)) {
             document.documentElement.style.setProperty("--accent-h", String(hue));
           }
+          var d = localStorage.getItem("ph-density");
+          if (d === "compact") document.documentElement.setAttribute("data-density", "compact");
+          if (theme === "dark") document.querySelector('meta[name="theme-color"]').setAttribute("content", "#0b0d10");
         } catch (e) { /* ignore */ }
       })();
     </script>
   </head>
   <body>
-    <div id="root"></div>
+    <div id="root">
+      <!-- Static shell: crawlers and slow connections see this; React replaces it on mount. -->
+      <div class="app">
+        <header class="bar"><div class="bar-in"><span class="brand"><b>Prompture</b></span></div></header>
+        <main class="main" id="main">
+          <div class="container">
+            <h1 class="page-title">Prompture Hub</h1>
+            <p class="page-sub">The operator console for your LLM gateway. Sign in to issue scoped hub keys with spend caps and rate limits, watch metered traffic, and compare the hub's ledger with provider bills.</p>
+            <noscript><p class="page-sub">This console needs JavaScript. The gateway's API at <code>/v1</code> keeps working without it.</p></noscript>
+          </div>
+        </main>
+      </div>
+    </div>
     <script type="module" src="/src/main.tsx"></script>
   </body>
 </html>
